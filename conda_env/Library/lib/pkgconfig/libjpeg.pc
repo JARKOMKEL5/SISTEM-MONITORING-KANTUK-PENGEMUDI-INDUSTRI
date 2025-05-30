@@ -1,0 +1,10 @@
+prefix=J:/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/conda_env/Library
+exec_prefix=J:/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/conda_env/Library
+libdir=J:/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/conda_env/Library/lib
+includedir=J:/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/SISTEM-MONITORING-KANTUK-PENGEMUDI-INDUSTRI-main/conda_env/Library/include
+
+Name: libjpeg
+Description: A SIMD-accelerated JPEG codec that provides the libjpeg API
+Version: 3.1.0
+Libs: -L${libdir} -ljpeg
+Cflags: -I${includedir}

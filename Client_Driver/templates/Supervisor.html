@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Supervisor Interface</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+
+      #messages {
+        max-height: 300px;
+        overflow-y: scroll;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-bottom: 15px;
+      }
+
+      .alert {
+        color: red;
+        font-weight: bold;
+      }
+
+      input,
+      button {
+        padding: 8px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Supervisor Dashboard</h2>
+
+    <div id="messages"></div>
+
+    <input id="supervisorInput" placeholder="Kirim pesan ke driver..." />
+    <button id="sendBtn">Kirim</button>
+
+    <script src="{{ url_for('static', filename='supervisor.js') }}"></script>
+  </body>
+</html>

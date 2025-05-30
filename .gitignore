@@ -1,0 +1,10 @@
+# Ignore Python environment folders
+monitor-env/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore virtual environment folders lainnya (opsional)
+venv/
+.env/

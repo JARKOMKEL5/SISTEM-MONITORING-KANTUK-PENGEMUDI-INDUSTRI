@@ -20,7 +20,7 @@ print(f"[*] Looking for HTML templates in: {TEMPLATE_FOLDER}")
 
 app = Flask(__name__, template_folder=TEMPLATE_FOLDER)
 app.config['SECRET_KEY'] = 'ganti_dengan_kunci_rahasia_anda!' # Penting untuk SocketIO
-socketio = SocketIO(app) # Inisialisasi SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*") # Inisialisasi SocketIO
 print("[*] Aplikasi Flask dan SocketIO diinisialisasi.")
 
 try:
@@ -293,4 +293,4 @@ if __name__ == '__main__':
     print("[*] Buka browser dan akses: http://127.0.0.1:5000/")
     # Jalankan dengan socketio.run() dan eventlet jika sudah diinstal
     # socketio.run(app, debug=True, use_reloader=False, host='0.0.0.0', port=5000)
-    socketio.run(app, debug=True, use_reloader=False) # Defaultnya Flask dev server, untuk eventlet/gevent perlu setup berbeda
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)

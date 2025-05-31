@@ -1,4 +1,4 @@
-# === File: drowsiness_detector/core.py ===
+# === File: Client_Driver/core.py ===
 import cv2
 import dlib
 from flask import Flask, render_template, Response
@@ -39,6 +39,11 @@ class DrowsinessDetector:
 
         self.sound_enabled = check_sound_module()
 
+    def run(self): 
+        print("[INFO] DrowsinessDetector background task started.")
+        while True: 
+            time.sleep(1) #Simulasi proses pasif saja (tidak akan eror.)
+            
     def _load_predictor(self):
         if not os.path.exists(self.model_path):
             print(f"[ERROR] Model not found: {self.model_path}")

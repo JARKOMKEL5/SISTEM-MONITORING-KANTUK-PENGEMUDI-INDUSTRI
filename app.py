@@ -1,17 +1,31 @@
-from flask import Flask, render_template
+# app.py
+from flask import Flask, render_template, Response
 from flask_socketio import SocketIO, emit
+from Client_Driver import DrowsinessDetector
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Inisialisasi detector dengan Flask app sebagai parameter
+model_path = "Client_Driver/model/shape_predictor_68_face_landmarks.dat"
+detector = DrowsinessDetector(app, model_path=model_path)
+
+def background_camera():
+    for frame in detector.generate_frames():
+        # Di sini bisa ditambahkan logika emit frame ke frontend jika dibutuhkan
+        pass
+
 @app.route('/')
 def index():
-    return render_template('Driver.html')  # Halaman Driver
+    return render_template('Driver.html')
 
 @app.route('/supervisor')
 def supervisor():
     return render_template('Supervisor.html')
 
+@app.route('/video_feed')
+def video_feed():
+    return Response(detector.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @socketio.on('connect')
 def handle_connect():
@@ -33,11 +47,5 @@ def handle_disconnect():
     print('Client disconnected')
 
 if __name__ == '__main__':
-    from Client_Driver import DrowsinessDetector  # pastikan __init__.py memuat ini
-
-    # Buat instance dan jalankan sebagai background task
-    detector = DrowsinessDetector(socketio, model_path="Client_Driver/model/shape_predictor_68_face_landmarks.dat")
-    socketio.start_background_task(detector.run)
-
-    # Jalankan Flask app
+    socketio.start_background_task(background_camera)
     socketio.run(app, host='localhost', port=5500, debug=True)

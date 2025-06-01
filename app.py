@@ -2,21 +2,25 @@
 from flask import Flask, render_template, Response
 from flask_socketio import SocketIO, emit
 from Client_Driver import DrowsinessDetector
+import time
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Inisialisasi detector dengan Flask app sebagai parameter
 model_path = "Client_Driver/model/shape_predictor_68_face_landmarks.dat"
-detector = DrowsinessDetector(app, model_path=model_path)
+detector = DrowsinessDetector(socketio=socketio, model_path=model_path)
 
+# === Background task untuk broadcast data ke supervisor ===
 def background_camera():
-    for frame in detector.generate_frames():
-        # Di sini bisa ditambahkan logika emit frame ke frontend jika dibutuhkan
-        pass
+    while True:
+        frame, data = detector.get_frame()
+        if frame is not None:
+            socketio.emit("driver_message", data)
+        time.sleep(1)
 
 @app.route('/')
-def index():
+def driver():
     return render_template('Driver.html')
 
 @app.route('/supervisor')
@@ -48,4 +52,4 @@ def handle_disconnect():
 
 if __name__ == '__main__':
     socketio.start_background_task(background_camera)
-    socketio.run(app, host='localhost', port=5500, debug=True)
+    socketio.run(app, host='http://127.0.0.1', port=5500, debug=True)

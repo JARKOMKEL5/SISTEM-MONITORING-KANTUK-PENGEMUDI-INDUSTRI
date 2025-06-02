@@ -7,129 +7,74 @@
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; }
         header { background-color: #2c3e50; color: white; padding: 20px 0; text-align: center; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         header h1 { margin: 0; font-size: 1.8em; }
-
         .page-container { padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .main-layout { display: flex; flex-wrap: wrap; gap: 20px; width: 100%; max-width: 1500px; justify-content: center; }
-        
-        .panel { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-        
-        .drivers-panel { flex: 1; min-width: 300px; max-width: 400px; }
-        .alerts-panel { flex: 2; min-width: 400px; max-width: 600px; }
+        .main-layout { display: flex; flex-wrap: wrap; gap: 20px; width: 100%; max-width: 1600px; justify-content: center; }
+        .panel { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); margin-bottom: 20px; }
+        .drivers-panel { flex: 1; min-width: 300px; max-width: 450px; } 
+        .alerts-panel { flex: 1.5; min-width: 350px; max-width: 550px; } 
         .call-panel { flex: 2; min-width: 400px; max-width: 700px; }
-
+        .log-panel { flex: 2; min-width: 400px; max-width: 700px; margin-top:0; }
         .panel h2 { margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; font-size: 1.4em; }
-
-        #driverList { list-style-type: none; padding: 0; }
-        #driverList li { 
-            padding: 12px 15px; 
-            border-bottom: 1px solid #ecf0f1; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            transition: background-color 0.2s ease;
-        }
-        #driverList li:last-child { border-bottom: none; }
-        #driverList li:hover { background-color: #f9f9f9; }
+        #driverList { list-style-type: none; padding: 0; max-height: 400px; overflow-y: auto;}
+        #driverList li { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s ease; flex-wrap: wrap; }
+        #driverList li:last-child { border-bottom: none; } #driverList li:hover { background-color: #f9f9f9; }
+        .driver-info-container { display: flex; flex-direction: column; align-items: flex-start; flex-grow: 1; }
         .driver-name { font-weight: bold; color: #2980b9; }
-        .driver-status-badge { 
-            font-size: 0.8em; 
-            padding: 4px 8px; 
-            border-radius: 4px; 
-            color: white; 
-            margin-left: 10px;
-        }
-        .status-online { background-color: #2ecc71; }
-        .status-offline { background-color: #95a5a6; }
-        .status-drowsy { background-color: #e74c3c; animation: blinkDrowsy 1s infinite; }
-
-        @keyframes blinkDrowsy {
-            50% { opacity: 0.6; }
-        }
-
-        #supervisorAlertsList { max-height: 350px; overflow-y: auto; margin-top: 10px; }
-        .supervisor-alert-item { 
-            padding: 12px; 
-            margin-bottom: 10px; 
-            border-radius: 5px; 
-            border-left-width: 5px;
-            border-left-style: solid;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .driver-status-badge { font-size: 0.8em; padding: 4px 8px; border-radius: 4px; color: white; margin-top: 4px; }
+        .status-online { background-color: #2ecc71; } .status-offline { background-color: #95a5a6; }
+        .status-drowsy-badge { background-color: #e74c3c; animation: blinkDrowsy 1s infinite; }
+        @keyframes blinkDrowsy { 50% { opacity: 0.6; } }
+        .driver-actions button { margin-left: 10px; }
+        #supervisorAlertsList { max-height: 300px; overflow-y: auto; margin-top: 10px; }
+        .supervisor-alert-item { padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left-width: 5px; border-left-style: solid; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
         .alert-critical { background-color: #f8d7da; border-left-color: #e74c3c; color: #721c24; }
         .alert-normal { background-color: #e6ffed; border-left-color: #2ecc71; color: #155724; }
         .alert-info { background-color: #d1ecf1; border-left-color: #3498db; color: #0c5460; }
-        .alert-message-content { flex-grow: 1; }
-
+        .alert-message-content { flex-grow: 1; padding-right: 10px; }
         .videos-container-webrtc { display: flex; gap: 15px; justify-content: center; margin-bottom: 15px; }
-        .videos-container-webrtc video { 
-            width: 100%; 
-            max-width: 320px; 
-            background-color: #2c3e50; 
-            border: 2px solid #bdc3c7; 
-            border-radius: 6px;
-        }
+        .videos-container-webrtc video { width: 100%; max-width: 320px; background-color: #2c3e50; border: 2px solid #bdc3c7; border-radius: 6px;}
         .videos-container-webrtc h4 { margin: 5px 0; font-size: 0.9em; color: #7f8c8d; }
-
-        button, .button { 
-            padding: 8px 15px; 
-            font-size: 0.9em; 
-            cursor: pointer; 
-            border-radius: 4px; 
-            border: none;
-            transition: background-color 0.2s ease, box-shadow 0.2s ease;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-        .btn-call { background-color: #3498db; color: white; }
-        .btn-call:hover { background-color: #2980b9; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .btn-call-driver-alert { background-color: #e67e22; color: white; }
-        .btn-call-driver-alert:hover { background-color: #d35400; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        
+        button, .button { padding: 8px 15px; font-size: 0.9em; cursor: pointer; border-radius: 4px; border: none; transition: background-color 0.2s ease, box-shadow 0.2s ease; text-decoration: none; display: inline-block; text-align: center; margin-top: 5px; }
+        .btn-call { background-color: #3498db; color: white; } .btn-call:hover { background-color: #2980b9; }
+        .btn-call-driver-alert { background-color: #e67e22; color: white; } .btn-call-driver-alert:hover { background-color: #d35400; }
+        .btn-cancel-call { background-color: #e74c3c; color: white; margin-left: 10px; display: none; }
+        .btn-cancel-call:hover { background-color: #c0392b; }
         #callStatusSupervisor { margin-top: 10px; font-weight: bold; color: #34495e; }
         #currentCallingDriverId { font-style: italic; color: #2980b9; }
-
+        #supervisorLogPanel { text-align: left; font-size: 0.8em; max-height: 300px; overflow-y: scroll; background-color: #fdfdfd; border: 1px solid #eee; padding: 10px; white-space: pre-wrap; }
+        #supervisorLogPanel div { padding: 2px 0; border-bottom: 1px dotted #eee; }
+        #supervisorLogPanel div:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
     <header><h1>Dasbor Pemantauan Driver Supervisor</h1></header>
-
     <div class="page-container">
         <div class="main-layout">
             <div class="panel drivers-panel">
                 <h2>Driver Terhubung</h2>
-                <ul id="driverList">
-                    <li>Tidak ada driver online.</li>
-                </ul>
+                <ul id="driverList"><li>Belum ada driver yang terhubung.</li></ul>
             </div>
-
             <div class="panel alerts-panel">
-                <h2>Notifikasi Sistem & Peringatan Kantuk</h2>
-                <div id="supervisorAlertsList">
-                    <p>Belum ada notifikasi.</p>
-                </div>
+                <h2>Notifikasi & Peringatan Kantuk</h2>
+                <div id="supervisorAlertsList"><p>Belum ada notifikasi.</p></div>
             </div>
-
             <div class="panel call-panel">
                 <h2>Panggilan Video WebRTC</h2>
                 <div class="videos-container-webrtc">
-                    <div>
-                        <h4>Video Anda (Supervisor)</h4>
-                        <video id="localVideoSupervisor" autoplay muted playsinline></video>
-                    </div>
-                    <div>
-                        <h4>Video Driver</h4>
-                        <video id="remoteVideoSupervisor" autoplay playsinline></video>
-                    </div>
+                    <div><h4>Video Anda (Supervisor)</h4><video id="localVideoSupervisor" autoplay muted playsinline></video></div>
+                    <div><h4>Video Driver</h4><video id="remoteVideoSupervisor" autoplay playsinline></video></div>
                 </div>
                 <div id="callStatusSupervisor">Status Panggilan: Tidak Aktif</div>
-                <p>Driver yang ditelepon: <span id="currentCallingDriverId">-</span></p>
+                <p>Driver yang ditelepon: <span id="currentCallingDriverId">-</span>
+                   <button id="cancelCallBtnSupervisor" class="btn-cancel-call">Batalkan Panggilan</button>
+                </p>
+            </div>
+            <div class="panel log-panel">
+                <h2>Log Aktivitas Supervisor</h2>
+                <div id="supervisorLogPanel"><div>Log akan muncul di sini...</div></div>
             </div>
         </div>
     </div>
-
     <script src="/assets/supervisor.js"></script>
 </body>
 </html>

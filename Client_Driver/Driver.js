@@ -1,5 +1,11 @@
 // File: Client_Driver/Driver.js
+// (Gunakan kode lengkap yang sudah Anda berikan di pertanyaan sebelumnya, 
+//  pastikan OPENCV_SERVER_HOST diatur ke 'localhost' jika DrowsinessDetection.py
+//  berjalan di laptop yang sama dengan browser driver ini)
 
+// =====================================================================================
+// KONFIGURASI SERVER
+// =====================================================================================
 const OPENCV_SERVER_HOST = 'localhost'; 
 const OPENCV_SERVER_PORT = '5000';
 
@@ -9,6 +15,7 @@ const WEBRTC_WS_URL = `ws://${WEBRTC_SERVER_HOST}:${WEBRTC_SERVER_PORT}/ws-webrt
 
 const OPENCV_SOCKETIO_URL = `http://${OPENCV_SERVER_HOST}:${OPENCV_SERVER_PORT}`;
 const OPENCV_VIDEO_FEED_BASE_URL = `http://${OPENCV_SERVER_HOST}:${OPENCV_SERVER_PORT}/video_feed`;
+// =====================================================================================
 
 let webrtcWebsocket;
 let peerConnectionDriver;
@@ -17,6 +24,7 @@ let myDriverId = null;
 let currentCallerId = null;
 let opencvSocket;
 
+// --- Elemen DOM (Pastikan semua ID ini ada di Driver.html Anda) ---
 const localVideoDriver = document.getElementById('localVideoDriver');
 const remoteVideoDriver = document.getElementById('remoteVideoDriver');
 const callStatusDriverUI = document.getElementById('callStatusDriver');
@@ -37,44 +45,49 @@ const thresholdValueOpenCVEl = document.getElementById('thresholdValueOpenCV');
 const alertMessageOpenCVEl = document.getElementById('alertMessageOpenCV');
 const opencvVideoFeedEl = document.getElementById('opencvVideoFeed');
 
+// =====================================================================================
+// BAGIAN WEBRTC
+// =====================================================================================
 const iceServersDriver = { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ]};
 
 if (registerDriverBtn) {
     registerDriverBtn.onclick = () => {
         console.log("Tombol 'Daftar ke Sistem WebRTC' diklik!");
         if(!driverIdInput || !registrationStatusUI) {
-            console.error("Elemen input ID atau status registrasi tidak ditemukan!"); return;
+            console.error("Elemen DOM untuk registrasi tidak ditemukan!"); return;
         }
         myDriverId = driverIdInput.value.trim();
         if (myDriverId) {
-            if (registrationStatusUI) registrationStatusUI.textContent = `Mencoba mendaftar WebRTC sebagai ${myDriverId}...`;
+            registrationStatusUI.textContent = `Mencoba mendaftar WebRTC sebagai ${myDriverId}...`;
             connectWebRTCWebSocket();
         } else {
-            if (registrationStatusUI) registrationStatusUI.textContent = 'ID Driver WebRTC tidak boleh kosong.';
+            registrationStatusUI.textContent = 'ID Driver WebRTC tidak boleh kosong.';
         }
     };
 } else { console.error("Tombol 'registerDriverBtn' tidak ditemukan!"); }
 
 function connectWebRTCWebSocket() {
-    if (webrtcWebsocket && webrtcWebsocket.readyState === WebSocket.OPEN && webrtcWebsocket.url === WEBRTC_WS_URL) {
-        console.log("WebRTC WS sudah terbuka dan URL cocok, mengirim register_driver ulang.");
-        webrtcWebsocket.send(JSON.stringify({ type: 'register_driver', driver_id: myDriverId }));
-        return;
-    }
-    if (webrtcWebsocket) { 
-        console.log("Menutup koneksi WebRTC WS lama...");
+    // Tutup koneksi lama jika ada, sebelum membuat yang baru
+    if (webrtcWebsocket && (webrtcWebsocket.readyState === WebSocket.OPEN || webrtcWebsocket.readyState === WebSocket.CONNECTING)) {
+        console.log("Menutup koneksi WebRTC WS lama sebelum membuka yang baru.");
         webrtcWebsocket.onopen = null; 
         webrtcWebsocket.onmessage = null;
         webrtcWebsocket.onerror = null;
-        webrtcWebsocket.onclose = null;
+        webrtcWebsocket.onclose = null; // Hapus listener lama untuk mencegah eksekusi ganda
         webrtcWebsocket.close();
     }
+    
     console.log(`Mencoba koneksi WebRTC WS ke: ${WEBRTC_WS_URL}`);
     webrtcWebsocket = new WebSocket(WEBRTC_WS_URL);
 
     webrtcWebsocket.onopen = () => {
-        console.log(`Terhubung ke Server WebRTC (${WEBRTC_WS_URL}) sebagai ${myDriverId}`);
-        webrtcWebsocket.send(JSON.stringify({ type: 'register_driver', driver_id: myDriverId }));
+        console.log(`Terhubung ke Server WebRTC (${WEBRTC_WS_URL}) dengan ID Driver: ${myDriverId}`);
+        if (myDriverId) { // Pastikan myDriverId ada sebelum mengirim
+            webrtcWebsocket.send(JSON.stringify({ type: 'register_driver', driver_id: myDriverId }));
+        } else {
+            console.error("Driver ID kosong saat mencoba mengirim pesan register_driver.");
+            if (registrationStatusUI) registrationStatusUI.textContent = 'Registrasi gagal: ID Driver kosong.';
+        }
     };
 
     webrtcWebsocket.onerror = (error) => {
@@ -83,19 +96,23 @@ function connectWebRTCWebSocket() {
     };
 
     webrtcWebsocket.onclose = (event) => {
-        console.log('Koneksi WebSocket WebRTC Driver terputus. Kode:', event.code, 'Alasan:', event.reason);
-        const alreadyRegistered = registrationStatusUI && registrationStatusUI.textContent.includes("Terdaftar di WebRTC");
+        console.log('Koneksi WebRTC WS Driver terputus. Kode:', event.code, 'Alasan:', event.reason);
+        const isRegistered = registrationStatusUI && registrationStatusUI.textContent.includes("Terdaftar di WebRTC");
         
+        // Hanya reset UI ke panel registrasi jika belum terdaftar atau jika panel panggilan tidak aktif (belum dalam panggilan)
         if (registrationPanel && callPanel && 
-            (!alreadyRegistered || (callPanel.style.display === 'none' && registrationPanel.style.display !== 'block'))) {
+            (!isRegistered || (callPanel.style.display === 'none' && registrationPanel.style.display !== 'block'))) {
+            
             registrationPanel.style.display = 'block';
-            callPanel.style.display = 'none';
-            if (registrationStatusUI && !alreadyRegistered) {
+            callPanel.style.display = 'none'; // Sembunyikan panel panggilan jika kembali ke registrasi
+            if (registrationStatusUI && !isRegistered) { // Hanya update jika belum pernah berhasil terdaftar
                  registrationStatusUI.textContent = "Koneksi WebRTC terputus. Silakan daftar ulang.";
             }
-        } else if (callStatusDriverUI && alreadyRegistered && callPanel.style.display !== 'none') {
+        } else if (callStatusDriverUI && isRegistered && callPanel.style.display !== 'none') {
+            // Jika sudah di panel panggilan dan koneksi terputus
              callStatusDriverUI.textContent = 'WebRTC: Terputus dari server.';
         }
+        // Selalu reset state panggilan jika koneksi WS utama terputus
         if (peerConnectionDriver) {
             resetCallStateDriver();
         }
@@ -116,13 +133,15 @@ function connectWebRTCWebSocket() {
             case 'error':
                 if (registrationStatusUI) registrationStatusUI.textContent = `Error WebRTC: ${data.message}`;
                 if (data.message && data.message.toLowerCase().includes("id driver sudah digunakan")) {
+                    // Biarkan UI di panel registrasi untuk coba ID lain
                     if (registrationPanel) registrationPanel.style.display = 'block';
                     if (callPanel) callPanel.style.display = 'none';
                 }
+                // myDriverId = null; // Jangan null-kan myDriverId agar bisa coba lagi
                 break;
             case 'webrtc_signal_failed':
                 alert(`Gagal memproses panggilan: ${data.reason}.`);
-                if (data.original_payload_type === "offer" || data.original_payload_type === "answer") resetCallStateDriver();
+                if (["offer", "answer"].includes(data.original_payload_type)) resetCallStateDriver();
                 break;
             case 'call_failed':
                 alert(`Panggilan gagal dari server: ${data.reason}`);
@@ -153,7 +172,7 @@ async function acceptCall(callerId) {
     console.log(`Menerima panggilan WebRTC dari ${callerId}`);
     if(incomingCallAlertUI) incomingCallAlertUI.style.display = 'none';
     if(callStatusDriverUI) callStatusDriverUI.textContent = 'WebRTC: Menerima panggilan...';
-    currentCallerId = callerId;
+    currentCallerId = callerId; 
     try {
         localStreamDriver = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if(localVideoDriver) localVideoDriver.srcObject = localStreamDriver;
@@ -165,8 +184,12 @@ async function acceptCall(callerId) {
         }
         resetCallStateDriver(); return;
     }
+    
+    if (peerConnectionDriver) resetCallStateDriver(); 
     peerConnectionDriver = new RTCPeerConnection(iceServersDriver);
+    
     if (localStreamDriver) { localStreamDriver.getTracks().forEach(track => peerConnectionDriver.addTrack(track, localStreamDriver)); }
+    
     peerConnectionDriver.onicecandidate = event => {
         if (event.candidate && webrtcWebsocket && currentCallerId) {
             webrtcWebsocket.send(JSON.stringify({ type: 'webrtc_signal', target_id: currentCallerId, payload: { type: 'candidate', candidate: event.candidate }}));
@@ -188,25 +211,29 @@ function rejectCall(callerId) {
         webrtcWebsocket.send(JSON.stringify({ type: 'webrtc_signal', target_id: callerId, payload: { type: 'call_rejected', reason: 'driver_rejected_call' }}));
     }
     if(callStatusDriverUI) callStatusDriverUI.textContent = 'WebRTC: Panggilan ditolak.';
-    currentCallerId = null; setTimeout(() => { if(callStatusDriverUI && callStatusDriverUI.textContent === 'WebRTC: Panggilan ditolak.') callStatusDriverUI.textContent = 'WebRTC: Menunggu panggilan...';}, 3000);
+    currentCallerId = null; 
+    setTimeout(() => { 
+        if(callStatusDriverUI && callStatusDriverUI.textContent === 'WebRTC: Panggilan ditolak.') {
+            callStatusDriverUI.textContent = 'WebRTC: Menunggu panggilan...';
+        }
+    }, 3000);
 }
 
 async function handleWebRTCSignalDriver(data) {
     if (!data.from_id) { console.error("Sinyal WebRTC tanpa from_id:", data); return; }
     const payload = data.payload; const fromId = data.from_id;
     console.log(`Driver: Menerima sinyal WebRTC tipe '${payload.type}' dari ${fromId}`);
+
     if (payload.type === 'offer') {
-        if (!peerConnectionDriver && currentCallerId === fromId ) { 
-             console.warn("Offer diterima, PC belum ada, memanggil acceptCall (seharusnya sudah dipanggil).");
-             await acceptCall(fromId); 
-             if (!peerConnectionDriver) { 
-                 console.error("Gagal memproses offer karena acceptCall tidak berhasil membuat PeerConnection.");
-                 return; 
-             }
+        if (!peerConnectionDriver) { 
+            currentCallerId = fromId; 
+            await acceptCall(fromId); 
+            if (!peerConnectionDriver) { 
+                console.error("Gagal memproses offer karena acceptCall tidak membuat PeerConnection.");
+                return; 
+            }
         } else if (currentCallerId && fromId !== currentCallerId) { 
             console.log(`Offer dari ${fromId}, tapi panggilan aktif dengan ${currentCallerId}. Abaikan.`); return; 
-        } else if (!peerConnectionDriver) {
-            console.error("Menerima offer tapi tidak dalam proses panggilan atau PC belum siap."); return;
         }
         
         try {
@@ -225,12 +252,15 @@ async function handleWebRTCSignalDriver(data) {
             catch (error) { console.error('Error menambah ICE candidate (Driver):', error); }
         } else { 
             console.warn("Menerima ICE candidate sebelum remoteDescription atau PC siap:", payload.candidate); 
-            // TODO: Implementasi antrian ICE candidate jika diperlukan
         }
-    } else if (payload.type === 'call_rejected' || payload.type === 'call_ended_by_supervisor' || payload.type === 'call_busy' || payload.type === 'call_cancelled_by_supervisor') { // Tangani pembatalan dari supervisor
-        resetCallStateDriver(); 
-        if(callStatusDriverUI) callStatusDriverUI.textContent = `WebRTC Panggilan diakhiri/dibatalkan: ${payload.reason || 'Info dari supervisor'}`;
+    } else if (payload.type === 'call_cancelled_by_supervisor') { 
+        console.log("Panggilan dibatalkan oleh supervisor sebelum dijawab.");
+        alert(`Panggilan dari ${fromId ? fromId.substring(0,8) : 'supervisor'} dibatalkan.`);
+        resetCallStateDriver();
         if(incomingCallAlertUI) incomingCallAlertUI.style.display = 'none';
+    } else if (payload.type === 'call_rejected' || payload.type === 'call_ended_by_supervisor' || payload.type === 'call_busy') {
+        resetCallStateDriver(); 
+        if(callStatusDriverUI) callStatusDriverUI.textContent = `WebRTC Panggilan diakhiri/ditolak: ${payload.reason || 'Info dari supervisor'}`;
     }
 }
 
@@ -238,7 +268,8 @@ function resetCallStateDriver() {
     if (localStreamDriver) { localStreamDriver.getTracks().forEach(track => track.stop()); localStreamDriver = null; }
     if (peerConnectionDriver) { 
         peerConnectionDriver.onicecandidate = null; peerConnectionDriver.ontrack = null; 
-        peerConnectionDriver.onconnectionstatechange = null; peerConnectionDriver.close(); 
+        peerConnectionDriver.onconnectionstatechange = null; 
+        if (peerConnectionDriver.signalingState !== "closed") peerConnectionDriver.close(); 
         peerConnectionDriver = null; 
     }
     if(localVideoDriver) localVideoDriver.srcObject = null; 
@@ -249,6 +280,7 @@ function resetCallStateDriver() {
 }
 
 // --- BAGIAN DATA OPENCV (Socket.IO) ---
+// (Ini adalah kode lengkap dari jawaban Anda sebelumnya)
 function connectOpenCVDataStream() {
     console.log(`Mencoba terhubung ke server OpenCV di ${OPENCV_SOCKETIO_URL}`);
     if (typeof io === "undefined") {

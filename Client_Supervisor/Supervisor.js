@@ -20,7 +20,7 @@ const supervisorLogPanel = document.getElementById('supervisorLogPanel');
 
 const iceServersSupervisor = { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ]};
 let supervisorLogMessages = [];
-const MAX_LOG_MESSAGES = 50;
+const MAX_LOG_MESSAGES = 100; 
 
 function addLogToSupervisorPanel(message, type = "info") {
     if (!supervisorLogPanel) return;
@@ -78,17 +78,18 @@ function connectSupervisorWebSocket() {
                 break;
             case 'webrtc_signal_failed':
                  addLogToSupervisorPanel(`Server gagal kirim sinyal WebRTC: ${data.reason} (tipe: ${data.original_payload_type})`, "error");
-                 if (currentCallingDriver && data.reason.includes(currentCallingDriver)) {
+                 if (currentCallingDriver && data.reason && data.reason.includes(currentCallingDriver)) { // Periksa apakah data.reason ada
                      if (callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Panggilan Gagal: ${currentCallingDriver} tidak online.`;
+                     alert(`Panggilan ke ${currentCallingDriver} gagal: Target tidak online atau koneksi bermasalah.`);
                      resetCallStateSupervisor(currentCallingDriver);
-                 } else { displaySystemNotification(`Server gagal kirim sinyal (${data.original_payload_type || ''}): ${data.reason}`, 'critical');}
+                 } else { displaySystemNotification(`Server gagal kirim sinyal (${data.original_payload_type || ''}): ${data.reason || 'Alasan tidak diketahui'}`, 'critical');}
                  break;
             case 'error':
                 displaySystemNotification(`Error server: ${data.message}`, 'critical');
                 addLogToSupervisorPanel(`Error dari server: ${data.message}`, "error");
                 break;
             default: 
-                addLogToSupervisorPanel(`Pesan tidak dikenal: ${JSON.stringify(data)}`, "warning");
+                addLogToSupervisorPanel(`Pesan tidak dikenal dari server: ${JSON.stringify(data)}`, "warning");
         }
     };
     supervisorWebsocket.onclose = (event) => {
@@ -114,10 +115,9 @@ function updateDriverList(drivers) {
         }
     });
     if (drivers.length === 0) {
-        if (!driverListUI.querySelector('li') || driverListUI.firstChild.textContent !== "Belum ada driver yang terhubung."){
+        if (!driverListUI.querySelector('li') || (driverListUI.firstChild && driverListUI.firstChild.textContent !== "Belum ada driver yang terhubung.")){
              driverListUI.innerHTML = '<li>Belum ada driver yang terhubung.</li>';
         }
-        return;
     } else if (driverListUI.firstChild && (driverListUI.firstChild.textContent === "Belum ada driver yang terhubung." || driverListUI.firstChild.textContent === "Koneksi server terputus.")){
          driverListUI.innerHTML = '';
     }
@@ -149,7 +149,7 @@ function updateDriverStatusInList(driverId, status, alertMessage = "") {
     const drowsyStatusSpan = driverLi.querySelector('.driver-alert-status');
     const callButton = driverLi.querySelector('.btn-call');
     if (statusBadge) {
-        statusBadge.classList.remove('status-drowsy-badge'); // Hapus class kantuk dulu
+        statusBadge.classList.remove('status-drowsy-badge'); 
         if (status === 'ONLINE' || status === 'ONLINE_NORMAL') {
             statusBadge.textContent = 'ONLINE'; statusBadge.className = 'driver-status-badge status-online';
             if (callButton) callButton.disabled = false;
@@ -157,11 +157,11 @@ function updateDriverStatusInList(driverId, status, alertMessage = "") {
         } else if (status === 'OFFLINE') {
             statusBadge.textContent = 'OFFLINE'; statusBadge.className = 'driver-status-badge status-offline';
             if (callButton) callButton.disabled = true;
-            if (drowsyStatusSpan) drowsyStatusSpan.textContent = '';
+            if (drowsyStatusSpan) drowsyStatusSpan.textContent = ''; 
             const existingAlert = document.getElementById(`drowsiness-alert-driver-${driverId}`);
             if(existingAlert && supervisorAlertsListUI) supervisorAlertsListUI.removeChild(existingAlert);
         } else if (status === 'DROWSY') {
-            statusBadge.textContent = 'ONLINE'; statusBadge.className = 'driver-status-badge status-online status-drowsy-badge';
+            statusBadge.textContent = 'ONLINE'; statusBadge.className = 'driver-status-badge status-online status-drowsy-badge'; 
             if (callButton) callButton.disabled = false;
             if (drowsyStatusSpan) { drowsyStatusSpan.textContent = `⚠️`; drowsyStatusSpan.style.color = '#e74c3c';}
         } else { statusBadge.textContent = status.toUpperCase(); statusBadge.className = 'driver-status-badge'; if (callButton) callButton.disabled = true; }
@@ -169,12 +169,9 @@ function updateDriverStatusInList(driverId, status, alertMessage = "") {
 }
 
 function displaySystemNotification(message, type = 'info') {
-    if (!supervisorAlertsListUI) { console.error("Elemen 'supervisorAlertsListUI' tidak ada."); return; }
-    if (supervisorAlertsListUI.firstChild && supervisorAlertsListUI.firstChild.nodeName === 'P' && supervisorAlertsListUI.firstChild.textContent === "Belum ada notifikasi.") {
-        supervisorAlertsListUI.innerHTML = '';
-    }
-    const alertItem = document.createElement('div');
-    alertItem.className = `supervisor-alert-item alert-${type}`;
+    if (!supervisorAlertsListUI) return;
+    if (supervisorAlertsListUI.firstChild && supervisorAlertsListUI.firstChild.nodeName === 'P' && supervisorAlertsListUI.firstChild.textContent === "Belum ada notifikasi.") { supervisorAlertsListUI.innerHTML = ''; }
+    const alertItem = document.createElement('div'); alertItem.className = `supervisor-alert-item alert-${type}`;
     alertItem.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
     supervisorAlertsListUI.prepend(alertItem);
     if (supervisorAlertsListUI.children.length > 15) { supervisorAlertsListUI.removeChild(supervisorAlertsListUI.lastChild); }
@@ -191,7 +188,6 @@ function displayDrowsinessNotification(driverId, message, type) {
     if (type === 'normal') { 
         if (alertItem) supervisorAlertsListUI.removeChild(alertItem);
         addLogToSupervisorPanel(`Notifikasi kantuk untuk ${driverId} dibersihkan (kembali normal).`);
-        // Tambahkan kembali pesan default jika tidak ada alert lain
         if (supervisorAlertsListUI.children.length === 0) {
              supervisorAlertsListUI.innerHTML = '<p>Belum ada notifikasi.</p>';
         }
@@ -228,10 +224,13 @@ async function startCall(driverId) {
     if(cancelCallBtnSupervisor) cancelCallBtnSupervisor.style.display = 'inline-block'; 
     if (peerConnections[driverId]) { peerConnections[driverId].close(); delete peerConnections[driverId]; } 
     try {
-        if (!localStreamSupervisor || localStreamSupervisor.getTracks().every(track => track.readyState === 'ended')) {
-            localStreamSupervisor = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            if(localVideoSupervisor) localVideoSupervisor.srcObject = localStreamSupervisor;
+        // Selalu coba dapatkan stream baru atau pastikan stream lama masih valid
+        if (localStreamSupervisor) { // Hentikan track lama jika ada
+            localStreamSupervisor.getTracks().forEach(track => track.stop());
         }
+        localStreamSupervisor = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if(localVideoSupervisor) localVideoSupervisor.srcObject = localStreamSupervisor;
+        
     } catch (error) {
         addLogToSupervisorPanel(`Error akses media: ${error.message}`, "error");
         if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = 'Error: Gagal akses kamera/mikrofon.';
@@ -250,6 +249,7 @@ async function startCall(driverId) {
             if (currentCallingDriver === driverId) { resetCallStateSupervisor(driverId); }
         }
         if (pc.connectionState === 'connected' && cancelCallBtnSupervisor) { cancelCallBtnSupervisor.textContent = "Akhiri Panggilan"; }
+        else if (cancelCallBtnSupervisor) { cancelCallBtnSupervisor.textContent = "Batalkan Panggilan"; } 
     };
     try {
         const offer = await pc.createOffer();
@@ -270,12 +270,18 @@ async function handleWebRTCSignalSupervisor(data) {
     addLogToSupervisorPanel(`Menerima sinyal tipe '${payload.type}' dari ${fromId}`);
     try {
         if (payload.type === 'answer') { await pc.setRemoteDescription(new RTCSessionDescription({type: 'answer', sdp: payload.sdp})); }
-        else if (payload.type === 'candidate') { await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)); }
+        else if (payload.type === 'candidate') { 
+            if (payload.candidate) { // Pastikan kandidat tidak null
+                 await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)); 
+            } else {
+                addLogToSupervisorPanel(`Menerima kandidat null dari ${fromId}. Mungkin akhir dari kandidat.`, "info");
+            }
+        }
         else if (payload.type === 'call_rejected' || payload.type === 'call_busy') {
             alert(`Driver ${fromId} menolak/sibuk: ${payload.reason}`);
             addLogToSupervisorPanel(`Panggilan ke ${fromId} ditolak/sibuk: ${payload.reason}`, "warning");
             resetCallStateSupervisor(fromId);
-        }  else if (payload.type === 'call_cancelled_by_supervisor') { 
+        } else if (payload.type === 'call_cancelled_by_supervisor') { 
              console.warn("Supervisor salah menerima 'call_cancelled_by_supervisor'. Ini seharusnya untuk driver.");
         }
     } catch (error) { addLogToSupervisorPanel(`Error proses sinyal dari ${fromId}: ${error.message}`, "error");}
@@ -283,6 +289,12 @@ async function handleWebRTCSignalSupervisor(data) {
 
 function resetUiAfterCallEnd() { 
     if(remoteVideoSupervisor) remoteVideoSupervisor.srcObject = null;
+    // Hentikan stream lokal supervisor SETELAH panggilan benar-benar selesai/dibatalkan
+    if(localStreamSupervisor && localVideoSupervisor) {
+        localStreamSupervisor.getTracks().forEach(track => track.stop());
+        localVideoSupervisor.srcObject = null;
+        localStreamSupervisor = null; // Set null agar getUserMedia dipanggil lagi untuk call berikutnya
+    }
     if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = 'Status Panggilan: Tidak Aktif';
     if(currentCallingDriverIdUI) currentCallingDriverIdUI.textContent = '-';
     if(cancelCallBtnSupervisor) {
@@ -297,7 +309,8 @@ function resetCallStateSupervisor(driverId) {
     const pcToClose = peerConnections[driverId];
     if (pcToClose) {
         pcToClose.onicecandidate = null; pcToClose.ontrack = null;
-        pcToClose.onconnectionstatechange = null; pcToClose.close();
+        pcToClose.onconnectionstatechange = null; 
+        if (pcToClose.signalingState !== "closed") pcToClose.close();
         delete peerConnections[driverId];
     }
     if (currentCallingDriver === driverId) { 
@@ -307,7 +320,8 @@ function resetCallStateSupervisor(driverId) {
 
 function cancelOrEndCall() {
     if (!currentCallingDriver) {
-        alert("Tidak ada panggilan untuk dibatalkan/diakhiri.");
+        // Tombol seharusnya tidak terlihat jika tidak ada currentCallingDriver, tapi sebagai jaga-jaga
+        if(cancelCallBtnSupervisor) cancelCallBtnSupervisor.style.display = 'none';
         return;
     }
     addLogToSupervisorPanel(`Membatalkan/Mengakhiri panggilan dengan ${currentCallingDriver}`);
@@ -322,7 +336,6 @@ function cancelOrEndCall() {
             addLogToSupervisorPanel(`Permintaan pembatalan panggilan ke ${currentCallingDriver} dikirim.`);
         }
     }
-    // Reset state dan tutup PeerConnection selalu dilakukan, baik panggilan sudah terhubung atau belum
     resetCallStateSupervisor(currentCallingDriver); 
 }
 
@@ -334,5 +347,5 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Tombol 'cancelCallBtnSupervisor' tidak ditemukan saat DOMContentLoaded!");
     }
     addLogToSupervisorPanel("Halaman supervisor dimuat dan siap.");
-    renderSupervisorLogs(); // Tampilkan log awal jika ada (misal dari sesi sebelumnya jika pakai localStorage)
+    renderSupervisorLogs(); 
 });

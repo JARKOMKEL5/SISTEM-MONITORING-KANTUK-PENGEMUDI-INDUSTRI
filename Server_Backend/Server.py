@@ -16,12 +16,10 @@ logging.basicConfig(
 logger = logging.getLogger("ServerRTC")
 
 WEBRTC_SUPERVISORS = set()
-WEBRTC_DRIVERS = {}  # Format: {driver_id: aiohttp_websocket_response_object}
-WEBRTC_CLIENTS_BY_WS = {}  # Format: {aiohttp_websocket_response_object: client_identifier}
-WEBRTC_CLIENTS_BY_ID = {}  # Format: {client_identifier: aiohttp_websocket_response_object}
-
-DRIVER_IDS_AVAILABLE = ['Driver1', 'Driver2', 'Driver3', 'Driver4', 'Driver5', 'Driver6', 'DriverAlpha', 'DriverBeta', 'DriverTest']
-
+WEBRTC_DRIVERS = {} 
+WEBRTC_CLIENTS_BY_WS = {}
+WEBRTC_CLIENTS_BY_ID = {}
+DRIVER_IDS_AVAILABLE = ['Driver1', 'DriverAlpha', 'DriverBeta', 'DriverTest', 'Driver2', 'Driver3']
 
 async def broadcast_to_supervisors(message_dict, exclude_ws=None):
     if WEBRTC_SUPERVISORS:
@@ -421,4 +419,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         logger.info("Aplikasi dihentikan (Ctrl+C di __main__).")
     finally:
-        logger.info("Aplikasi selesai.")
+        logging.info("Aplikasi selesai.")

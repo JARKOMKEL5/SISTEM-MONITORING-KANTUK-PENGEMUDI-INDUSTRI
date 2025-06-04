@@ -13,7 +13,7 @@ const wss = new WebSocket.Server({ server });
 const PORT = process.env.PORT || 8080;
 
 // Daftar ID Driver yang dikenali oleh sistem
-const PREDEFINED_AVAILABLE_DRIVER_IDS = ['Driver1', 'DriverAlpha', 'DriverBeta', 'DriverTest', 'Driver2', 'Driver3'];
+const PREDEFINED_AVAILABLE_DRIVER_IDS = ['Driver1', 'Driver2', 'Driver3', 'Driver4', 'Driver5', 'Driver6'];
 
 const supervisors = new Map(); // ws -> supervisorId (objek ws sebagai key)
 const drivers = new Map(); // driverId -> ws (string driverId sebagai key)

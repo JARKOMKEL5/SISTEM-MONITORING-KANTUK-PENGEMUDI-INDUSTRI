@@ -2,77 +2,51 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Halaman Driver - Pemantauan & Panggilan</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; }
-        header { background-color: #333; color: white; padding: 15px 0; text-align: center; width: 100%; margin-bottom: 20px; }
-        .main-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; width: 95%; max-width: 1400px; }
-        .panel { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); text-align: center; margin-bottom:20px; }
-        .registration-panel { width: 100%; max-width: 400px;}
-        .call-panel { width: 100%; max-width: 700px; }
-        .opencv-panel { width: 100%; max-width: 1000px; display: flex; flex-direction: column; align-items: center;}
-        .opencv-content { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 20px; width: 100%; margin-top:15px;}
-        .video-container-opencv { border: 2px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.1); min-width: 320px; max-width: 640px; background-color: #eee; display:flex; align-items:center; justify-content:center; }
-        .video-container-opencv img { max-width: 100%; height: auto; }
-        .info-panel-opencv { background-color: #f9f9f9; padding: 15px; border-radius: 8px; width: 300px; text-align: left; }
-        .info-panel-opencv h3 { margin-top: 0; color: #333; text-align: center; }
-        .info-item { margin-bottom: 10px; font-size: 15px; }
-        .info-item strong { color: #555; }
-        #alertMessageOpenCV { font-size: 20px; font-weight: bold; padding: 12px; margin-top: 10px; border-radius: 5px; text-align: center; word-wrap: break-word; }
-        .alert-normal { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
-        .alert-warning { background-color: #fff3cd; color: #ffc107; border: 1px solid #ffc107; }
-        .alert-critical { background-color: #f8d7da; color: #dc3545; border: 1px solid #dc3545; }
-        .status-calibrating { color: #007bff; } .status-monitoring { color: #28a745; }
-        .status-no-face { color: #fd7e14; } .status-error { color: #dc3545; }
-        .videos-container-webrtc { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;}
-        .videos-container-webrtc video { width: 100%; max-width: 300px; background-color: #222; border: 1px solid #ccc; }
-        button { padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; border-radius: 5px; border: none; }
-        .btn-accept { background-color: #28a745; color: white; }
-        .btn-reject { background-color: #dc3545; color: white; }
-        #driverIdInput { padding: 8px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Monitoring - {{ driver_id }}</title>
+    <link rel="stylesheet" href="https://uicdn.toast.com/tui-grid/latest/tui-grid.css" /> <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #2c3e50; color: #ecf0f1; display: flex; flex-direction: column; align-items: center; }
+        .container { display: flex; flex-direction: column; align-items: center; width: 100%; }
+        h1 { color: #3498db; }
+        .video-area { display: flex; justify-content: space-around; width: 100%; max-width: 1300px; margin-bottom: 20px; gap: 20px; }
+        .video-wrapper { border: 2px solid #3498db; padding: 10px; background-color: #34495e; box-shadow: 0 0 15px rgba(0,0,0,0.5); border-radius: 8px; }
+        .video-wrapper h2 { margin-top: 0; text-align: center; color: #95a5a6;}
+        #drowsiness-feed-img { display: block; width: 100%; max-width: 640px; height: auto; border-radius: 4px; background-color: #000; }
+        .webrtc-videos video { width: 100%; max-width: 320px; height: auto; border: 1px solid #7f8c8d; border-radius: 4px; background-color: #000; }
+        .status-panel { background-color: #34495e; padding: 15px; border-radius: 8px; margin-top: 20px; width:100%; max-width: 600px; box-shadow: 0 0 10px rgba(0,0,0,0.3); }
+        .status-panel p { margin: 5px 0; }
+        #call-status { font-weight: bold; color: #e67e22; }
+        button { background-color: #3498db; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; margin-top: 10px; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
     </style>
 </head>
 <body>
-    <header><h1>Dasbor Driver</h1></header>
-    <div class="main-container">
-        <div class="panel registration-panel" id="registrationPanel">
-            <h2>Identifikasi Driver (WebRTC)</h2>
-            <input type="text" id="driverIdInput" placeholder="Masukkan ID Driver Anda">
-            <button id="registerDriverBtn">Daftar ke Sistem WebRTC</button>
-            <p id="registrationStatus">-</p>
+    <div class="container">
+        <h1>Driver Monitoring System (ID: <span id="driverIdDisplay">{{ driver_id }}</span>)</h1>
+
+        <div class="video-area">
+            <div class="video-wrapper">
+                <h2>Drowsiness Detection Feed</h2>
+                <img id="drowsiness-feed-img" src="{{ url_for('video_feed_route') }}" alt="Video Feed Deteksi Kantuk">
+            </div>
+            <div class="video-wrapper webrtc-videos">
+                <h2>Panggilan Supervisor</h2>
+                <video id="localVideoDriver" autoplay muted playsinline></video>
+                <video id="remoteVideoDriver" autoplay playsinline></video>
+            </div>
         </div>
-        <div class="panel call-panel" id="callPanel" style="display: none;">
-            <h2>Panggilan Video (WebRTC)</h2>
-            <div id="incomingCallAlert" style="display:none;">
-                <p>Panggilan masuk dari Supervisor (<span id="callerIdText"></span>)!</p>
-                <button id="acceptCallBtn" class="btn-accept">Terima</button>
-                <button id="rejectCallBtn" class="btn-reject">Tolak</button>
-            </div>
-            <div class="videos-container-webrtc">
-                <div><h4>Video Anda (Driver)</h4><video id="localVideoDriver" autoplay muted playsinline></video></div>
-                <div><h4>Video Supervisor</h4><video id="remoteVideoDriver" autoplay playsinline></video></div>
-            </div>
-            <p id="callStatusDriver">Status WebRTC: Menunggu panggilan...</p>
-        </div>
-        <div class="panel opencv-panel">
-            <h2>Pemantauan Kantuk (OpenCV)</h2>
-            <div class="opencv-content">
-                <div class="video-container-opencv">
-                    <img id="opencvVideoFeed" src="" width="640" height="480" alt="Memuat Video Stream OpenCV...">
-                </div>
-                <div class="info-panel-opencv">
-                    <h3>Informasi Deteksi</h3>
-                    <div class="info-item"><strong>Status Sistem:</strong> <span id="systemStatusOpenCV" class="status-no-face">Menghubungkan...</span></div>
-                    <div class="info-item"><strong>Status Kalibrasi:</strong> <span id="calibrationStatusOpenCV">-</span></div>
-                    <div class="info-item"><strong>EAR (Mata):</strong> <span id="earValueOpenCV">-</span></div>
-                    <div class="info-item"><strong>PERCLOS (%):</strong> <span id="perclosValueOpenCV">-</span></div>
-                    <div class="info-item"><strong>Threshold EAR:</strong> <span id="thresholdValueOpenCV">-</span></div>
-                    <div id="alertMessageOpenCV" class="alert-normal">Tidak Ada Peringatan</div>
-                </div>
-            </div>
+
+        <div class="status-panel">
+            <h2>Status Panggilan</h2>
+            <p id="call-status">Belum ada panggilan.</p>            
+            <p>Socket.IO Status: <span id="socketStatus">Menghubungkan...</span></p>
+             <button id="answerCallBtn" style="display:none;">Jawab Panggilan</button>
+             <button id="endCallBtnDriver" style="display:none;">Akhiri Panggilan</button>
         </div>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <script src="/assets/driver.js"></script>
+
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='Driver.js') }}"></script>
 </body>
 </html>

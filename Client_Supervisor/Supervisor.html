@@ -2,63 +2,79 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supervisor Dashboard</title>
+    <title>Dasbor Supervisor - Pemantauan Driver</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f6f8; color: #333; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 1200px; }
-        h1, h2 { color: #2c3e50; }
-        .control-panel, .video-panel, .alerts-panel { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .video-panel { display: flex; justify-content: space-around; gap: 15px; }
-        .video-wrapper { border: 1px solid #ddd; padding: 5px; }
-        .video-wrapper video { width: 100%; max-width: 480px; height: auto; background-color: #000; }
-        #alerts-log { list-style-type: none; padding: 0; max-height: 300px; overflow-y: auto; border: 1px solid #eee; }
-        #alerts-log li { padding: 8px; border-bottom: 1px solid #eee; }
-        #alerts-log li:last-child { border-bottom: none; }
-        .alert-critical { background-color: #ffebee; color: #c62828; }
-        .alert-normal { background-color: #e8f5e9; color: #2e7d32; }
-        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        input[type="text"] { padding: 8px; border-radius: 4px; border: 1px solid #ccc; margin-right: 10px; }
-        .driver-status { margin-bottom: 15px; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; }
+        header { background-color: #2c3e50; color: white; padding: 20px 0; text-align: center; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        header h1 { margin: 0; font-size: 1.8em; }
+        .page-container { padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .main-layout { display: flex; flex-wrap: wrap; gap: 20px; width: 100%; max-width: 1600px; justify-content: center; }
+        .panel { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); margin-bottom: 20px; }
+        .drivers-panel { flex: 1; min-width: 300px; max-width: 450px; } 
+        .alerts-panel { flex: 1.5; min-width: 350px; max-width: 550px; } 
+        .call-panel { flex: 2; min-width: 400px; max-width: 700px; }
+        .log-panel { flex: 2; min-width: 400px; max-width: 700px; margin-top:0; }
+        .panel h2 { margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; font-size: 1.4em; }
+        #driverList { list-style-type: none; padding: 0; max-height: 400px; overflow-y: auto;}
+        #driverList li { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s ease; flex-wrap: wrap; }
+        #driverList li:last-child { border-bottom: none; } #driverList li:hover { background-color: #f9f9f9; }
+        .driver-info-container { display: flex; flex-direction: column; align-items: flex-start; flex-grow: 1; }
+        .driver-name { font-weight: bold; color: #2980b9; }
+        .driver-status-badge { font-size: 0.8em; padding: 4px 8px; border-radius: 4px; color: white; margin-top: 4px; }
+        .status-online { background-color: #2ecc71; } .status-offline { background-color: #95a5a6; }
+        .status-drowsy-badge { background-color: #e74c3c; animation: blinkDrowsy 1s infinite; }
+        @keyframes blinkDrowsy { 50% { opacity: 0.6; } }
+        .driver-actions button { margin-left: 10px; }
+        #supervisorAlertsList { max-height: 300px; overflow-y: auto; margin-top: 10px; }
+        .supervisor-alert-item { padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left-width: 5px; border-left-style: solid; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .alert-critical { background-color: #f8d7da; border-left-color: #e74c3c; color: #721c24; }
+        .alert-normal { background-color: #e6ffed; border-left-color: #2ecc71; color: #155724; }
+        .alert-info { background-color: #d1ecf1; border-left-color: #3498db; color: #0c5460; }
+        .alert-message-content { flex-grow: 1; padding-right: 10px; }
+        .videos-container-webrtc { display: flex; gap: 15px; justify-content: center; margin-bottom: 15px; }
+        .videos-container-webrtc video { width: 100%; max-width: 320px; background-color: #2c3e50; border: 2px solid #bdc3c7; border-radius: 6px;}
+        .videos-container-webrtc h4 { margin: 5px 0; font-size: 0.9em; color: #7f8c8d; }
+        button, .button { padding: 8px 15px; font-size: 0.9em; cursor: pointer; border-radius: 4px; border: none; transition: background-color 0.2s ease, box-shadow 0.2s ease; text-decoration: none; display: inline-block; text-align: center; margin-top: 5px; }
+        .btn-call { background-color: #3498db; color: white; } .btn-call:hover { background-color: #2980b9; }
+        .btn-call-driver-alert { background-color: #e67e22; color: white; } .btn-call-driver-alert:hover { background-color: #d35400; }
+        .btn-cancel-call { background-color: #e74c3c; color: white; margin-left: 10px; display: none; }
+        .btn-cancel-call:hover { background-color: #c0392b; }
+        #callStatusSupervisor { margin-top: 10px; font-weight: bold; color: #34495e; }
+        #currentCallingDriverId { font-style: italic; color: #2980b9; }
+        #supervisorLogPanel { text-align: left; font-size: 0.8em; max-height: 300px; overflow-y: scroll; background-color: #fdfdfd; border: 1px solid #eee; padding: 10px; white-space: pre-wrap; }
+        #supervisorLogPanel div { padding: 2px 0; border-bottom: 1px dotted #eee; }
+        #supervisorLogPanel div:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Supervisor Dashboard</h1>
-
-        <div class="control-panel">
-            <h2>Kontrol Panggilan</h2>
-            <div class="driver-status">
-                Status Driver (<span id="targetDriverIdInputDisplay">driver_001</span>): <strong id="driverConnectionStatus">Offline</strong>
+    <header><h1>Dasbor Pemantauan Driver Supervisor</h1></header>
+    <div class="page-container">
+        <div class="main-layout">
+            <div class="panel drivers-panel">
+                <h2>Driver Terhubung</h2>
+                <ul id="driverList"><li>Memuat daftar driver...</li></ul> {/* Sedikit perubahan teks awal */}
             </div>
-            <input type="text" id="targetDriverIdInput" value="driver_001" placeholder="Masukkan ID Driver">
-            <button id="callDriverBtn">Panggil Driver</button>
-            <button id="endCallBtnSupervisor" style="display:none;">Akhiri Panggilan</button>
-            <p>Status Panggilan: <strong id="supervisorCallStatus">Tidak ada panggilan aktif.</strong></p>
-            <p>Socket.IO Status: <span id="supervisorSocketStatus">Menghubungkan...</span></p>
-        </div>
-
-        <div class="video-panel">
-            <div class="video-wrapper">
-                <h3>Kamera Supervisor (Lokal)</h3>
-                <video id="localVideoSupervisor" autoplay muted playsinline></video>
+            <div class="panel alerts-panel">
+                <h2>Notifikasi & Peringatan Kantuk</h2>
+                <div id="supervisorAlertsList"><p>Belum ada notifikasi.</p></div>
             </div>
-            <div class="video-wrapper">
-                <h3>Kamera Driver (Remote)</h3>
-                <video id="remoteVideoSupervisor" autoplay playsinline></video>
+            <div class="panel call-panel">
+                <h2>Panggilan Video WebRTC</h2>
+                <div class="videos-container-webrtc">
+                    <div><h4>Video Anda (Supervisor)</h4><video id="localVideoSupervisor" autoplay muted playsinline></video></div>
+                    <div><h4>Video Driver</h4><video id="remoteVideoSupervisor" autoplay playsinline></video></div>
+                </div>
+                <div id="callStatusSupervisor">Status Panggilan: Tidak Aktif</div>
+                <p>Driver yang ditelepon: <span id="currentCallingDriverId">-</span>
+                   <button id="cancelCallBtnSupervisor" class="btn-cancel-call">Batalkan Panggilan</button>
+                </p>
             </div>
-        </div>
-
-        <div class="alerts-panel">
-            <h2>Log Peringatan Kantuk</h2>
-            <ul id="alerts-log">
-                <li>Belum ada peringatan.</li>
-            </ul>
+            <div class="panel log-panel">
+                <h2>Log Aktivitas Supervisor</h2>
+                <div id="supervisorLogPanel"><div>Log akan muncul di sini...</div></div>
+            </div>
         </div>
     </div>
-
-    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
-    <script src="../static/Supervisor.js"></script> </body>
+    <script src="/assets/supervisor.js"></script> {/* Path ini sudah benar */}
+</body>
 </html>

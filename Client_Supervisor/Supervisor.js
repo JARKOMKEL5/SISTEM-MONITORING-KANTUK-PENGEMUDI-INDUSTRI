@@ -1,25 +1,22 @@
 // File: Client_Supervisor/Supervisor.js
-// Versi yang diperbaiki untuk mengatasi masalah tidak dapat menemukan driver
+// (Versi terbaru dengan penanganan daftar driver yang lebih baik)
 
 // =====================================================================================
 // KONFIGURASI SERVER
 // =====================================================================================
-const WEBRTC_SERVER_HOST_SUPERVISOR = location.hostname; 
+const WEBRTC_SERVER_HOST_SUPERVISOR = location.hostname;
 const WEBRTC_SERVER_PORT_SUPERVISOR = '8080';
-const WEBRTC_SUPERVISOR_WS_URL = `ws://${WEBRTC_SERVER_HOST_SUPERVISOR}:${WEBRTC_SERVER_PORT_SUPERVISOR}/ws-webrtc`;
+const WEBRTC_SUPERVISOR_WS_URL = `ws://${WEBRTC_SERVER_HOST_SUPERVISOR}:${WEBRTC_SERVER_PORT_SUPERVISOR}`;
 // =====================================================================================
 
-// Variabel global
 let supervisorWebsocket;
-let peerConnections = {}; 
+let peerConnections = {};
 let localStreamSupervisor;
 let currentCallingDriver = null;
-let availableDrivers = new Set(); // Track driver yang benar-benar tersedia
-let driverStatuses = new Map(); // Track status setiap driver
+let driverStatuses = new Map();
 let connectionRetryCount = 0;
-const MAX_RETRY_COUNT = 3;
+const MAX_RETRY_COUNT = 5;
 
-// Elemen DOM
 const driverListUI = document.getElementById('driverList');
 const supervisorAlertsListUI = document.getElementById('supervisorAlertsList');
 const localVideoSupervisor = document.getElementById('localVideoSupervisor');
@@ -29,15 +26,14 @@ const currentCallingDriverIdUI = document.getElementById('currentCallingDriverId
 const cancelCallBtnSupervisor = document.getElementById('cancelCallBtnSupervisor');
 const supervisorLogPanel = document.getElementById('supervisorLogPanel');
 
-const iceServersSupervisor = { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ]};
+const iceServersSupervisor = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 let supervisorLogMessages = [];
-const MAX_LOG_MESSAGES = 100; 
+const MAX_LOG_MESSAGES = 100;
 let callTimeoutId = null;
 let heartbeatInterval = null;
+let supervisorUniqueId = `supervisor_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-// =====================================================================================
-// FUNGSI LOGGING
-// =====================================================================================
+// --- FUNGSI LOGGING ---
 function addLogToSupervisorPanel(message, type = "info") {
     if (!supervisorLogPanel) return;
     const now = new Date();
@@ -47,7 +43,6 @@ function addLogToSupervisorPanel(message, type = "info") {
     if (supervisorLogMessages.length > MAX_LOG_MESSAGES) supervisorLogMessages.pop();
     renderSupervisorLogs();
 }
-
 function renderSupervisorLogs() {
     if (!supervisorLogPanel) return;
     supervisorLogPanel.innerHTML = ''; 
@@ -61,375 +56,195 @@ function renderSupervisorLogs() {
     });
 }
 
-// =====================================================================================
-// FUNGSI KONEKSI WEBSOCKET
-// =====================================================================================
+// --- FUNGSI KONEKSI WEBSOCKET ---
 function connectSupervisorWebSocket() {
-    addLogToSupervisorPanel(`Mencoba koneksi ke server di ${WEBRTC_SUPERVISOR_WS_URL}... (percobaan ${connectionRetryCount + 1})`);
-    
-    if (supervisorWebsocket) {
-        supervisorWebsocket.onopen = null;
-        supervisorWebsocket.onmessage = null;
-        supervisorWebsocket.onclose = null;
-        supervisorWebsocket.onerror = null;
-        if (supervisorWebsocket.readyState === WebSocket.OPEN) {
-            supervisorWebsocket.close();
-        }
+    addLogToSupervisorPanel(`Mencoba koneksi ke Node.js server di ${WEBRTC_SUPERVISOR_WS_URL}... (percobaan ${connectionRetryCount + 1})`);
+    if (supervisorWebsocket && (supervisorWebsocket.readyState === WebSocket.OPEN || supervisorWebsocket.readyState === WebSocket.CONNECTING)) {
+        supervisorWebsocket.onopen = null; supervisorWebsocket.onmessage = null; supervisorWebsocket.onerror = null; supervisorWebsocket.onclose = null;
+        supervisorWebsocket.close();
     }
-    
     supervisorWebsocket = new WebSocket(WEBRTC_SUPERVISOR_WS_URL);
 
     supervisorWebsocket.onopen = () => {
         connectionRetryCount = 0;
-        // Registrasi sebagai supervisor dengan ID unik
-        const supervisorId = `supervisor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        supervisorWebsocket.send(JSON.stringify({ 
-            type: 'register_supervisor',
-            supervisor_id: supervisorId
-        }));
-        
-        displaySystemNotification("Terhubung ke server sebagai supervisor.", "info");
-        addLogToSupervisorPanel("Berhasil terhubung ke server WebRTC sebagai supervisor.", "success");
-        
-        // Request daftar driver yang tersedia
-        requestDriverList();
-        
-        // Setup heartbeat untuk menjaga koneksi
+        supervisorWebsocket.send(JSON.stringify({ type: 'register_supervisor', supervisor_id: supervisorUniqueId }));
+        displaySystemNotification("Terhubung ke server Node.js sebagai supervisor.", "info");
+        addLogToSupervisorPanel("Berhasil terhubung ke server WebRTC Node.js.", "success");
         setupHeartbeat();
+        // Server akan mengirim update status semua driver setelah registrasi berhasil
     };
-
     supervisorWebsocket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        addLogToSupervisorPanel(`Menerima pesan dari server: ${JSON.stringify(data)}`);
+        // addLogToSupervisorPanel(`Menerima pesan dari Node.js server: ${JSON.stringify(data)}`); // Kurangi log jika terlalu banyak
         handleServerMessage(data);
     };
-
     supervisorWebsocket.onclose = (event) => {
-        const logMsg = `Koneksi server terputus. Kode: ${event.code}. Alasan: ${event.reason || 'Tidak diketahui'}`;
-        displaySystemNotification(logMsg, "critical"); 
+        const logMsg = `Koneksi Node.js server terputus. Kode: ${event.code}. Alasan: ${event.reason || 'Tidak diketahui'}`;
+        displaySystemNotification(logMsg, "critical");
         addLogToSupervisorPanel(logMsg, "error");
-        
-        // Reset semua state
-        availableDrivers.clear();
-        driverStatuses.clear();
-        if(driverListUI) driverListUI.innerHTML = '<li>Koneksi server terputus. Mencoba menghubungkan kembali...</li>'; 
+        if (driverListUI) driverListUI.innerHTML = '<li>Koneksi server terputus. Mencoba menghubungkan kembali...</li>';
         Object.keys(peerConnections).forEach(driverId => resetCallStateSupervisor(driverId));
-        
-        // Clear heartbeat
-        if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-            heartbeatInterval = null;
-        }
-        
-        // Retry connection dengan backoff
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         connectionRetryCount++;
-        const retryDelay = Math.min(1000 * Math.pow(2, connectionRetryCount), 10000); // Max 10 detik
-        addLogToSupervisorPanel(`Akan mencoba lagi dalam ${retryDelay/1000} detik...`);
+        const retryDelay = Math.min(1000 * Math.pow(2, connectionRetryCount), 15000);
+        addLogToSupervisorPanel(`Akan mencoba lagi dalam ${retryDelay / 1000} detik...`);
         setTimeout(connectSupervisorWebSocket, retryDelay);
     };
-
     supervisorWebsocket.onerror = (error) => {
-        displaySystemNotification("Error koneksi WebSocket.", "critical"); 
-        addLogToSupervisorPanel(`Error koneksi WebSocket: ${error.message || 'Unknown error'}`, "error");
+        displaySystemNotification("Error koneksi WebSocket (Node.js).", "critical");
+        addLogToSupervisorPanel(`Error koneksi WebSocket ke Node.js: ${error.message || 'Unknown error'}`, "error");
     };
 }
 
 function setupHeartbeat() {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
-    
     heartbeatInterval = setInterval(() => {
         if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) {
             supervisorWebsocket.send(JSON.stringify({ type: 'ping' }));
-            // Request update driver list setiap 10 detik
-            requestDriverList();
         }
-    }, 10000); // 10 detik
+    }, 15000);
 }
 
-function requestDriverList() {
-    if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) {
-        supervisorWebsocket.send(JSON.stringify({ type: 'request_driver_list' }));
-        addLogToSupervisorPanel("Meminta daftar driver terbaru dari server...");
-    }
-}
-
-// =====================================================================================
-// FUNGSI PENANGANAN PESAN SERVER
-// =====================================================================================
+// --- PENANGANAN PESAN SERVER ---
 function handleServerMessage(data) {
+    // addLogToSupervisorPanel(`DEBUG: Server message type: ${data.type}`, "info");
     switch (data.type) {
+        case 'registration_successful':
+            addLogToSupervisorPanel(`Supervisor ${data.supervisor_id} berhasil terdaftar.`, "success");
+            // Server akan mengirim `driver_status_update` untuk semua driver setelah ini.
+            break;
         case 'pong':
-            // Response untuk ping
             break;
-            
-        case 'driver_list': 
-            updateDriverList(data.drivers); 
-            addLogToSupervisorPanel(`Daftar driver diterima: ${data.drivers.length > 0 ? data.drivers.join(', ') : 'Kosong'}`, "success"); 
+        case 'driver_list': // Diterima dari server berisi ID driver yang sedang online
+            // Fungsi ini bisa digunakan untuk cross-check atau pembaruan cepat daftar driver online
+            // Namun, `driver_status_update` akan menjadi sumber utama untuk status individual.
+            addLogToSupervisorPanel(`Daftar driver online diterima: ${data.drivers.length > 0 ? data.drivers.join(', ') : 'Kosong'}`, "info");
+            // Anda bisa memilih untuk tidak melakukan apa-apa di sini jika updateDriverStatusInList sudah cukup
+            // atau melakukan sinkronisasi (misalnya, menghapus driver dari UI jika tidak ada di list ini DAN statusnya offline)
             break;
-            
-        case 'driver_connected':
-            addDriverToAvailableList(data.driver_id);
-            addLogToSupervisorPanel(`Driver ${data.driver_id} terhubung`, "success");
+        case 'driver_status_update':
+            updateDriverStatusInList(data.driver_id, data.status.toUpperCase());
+            // addLogToSupervisorPanel(`Update status untuk ${data.driver_id}: ${data.status}`, "info"); // Bisa jadi terlalu berisik
             break;
-            
-        case 'driver_disconnected':
-            removeDriverFromAvailableList(data.driver_id);  
-            addLogToSupervisorPanel(`Driver ${data.driver_id} terputus`, "warning");
-            break;
-            
-        case 'driver_status_update': 
-            updateDriverStatusInList(data.driver_id, data.status.toUpperCase()); 
-            addLogToSupervisorPanel(`Status driver ${data.driver_id} diubah menjadi ${data.status}`, "success"); 
-            break;
-            
         case 'supervisor_drowsiness_alert':
             displayDrowsinessNotification(data.driver_id, data.message, 'critical');
-            updateDriverStatusInList(data.driver_id, 'DROWSY', data.message);
+            updateDriverStatusInList(data.driver_id, 'DROWSY');
             addLogToSupervisorPanel(`PERINGATAN KANTUK ${data.driver_id}: ${data.message}`, "warning");
             break;
-            
         case 'supervisor_driver_normal':
-            displayDrowsinessNotification(data.driver_id, data.message, 'normal');
-            updateDriverStatusInList(data.driver_id, 'ONLINE'); 
+            displayDrowsinessNotification(data.driver_id, `Driver ${data.driver_id} kembali normal.`, 'normal');
+            updateDriverStatusInList(data.driver_id, 'ONLINE');
             addLogToSupervisorPanel(`Driver ${data.driver_id} kembali normal.`, "success");
             break;
-            
-        case 'webrtc_signal': 
-            handleWebRTCSignalSupervisor(data); 
+        case 'webrtc_signal':
+            handleWebRTCSignalSupervisor(data);
             break;
-            
-        case 'call_failed':
-            handleCallFailed(data);
-            break;
-            
         case 'webrtc_signal_failed':
-            handleSignalFailed(data);
-            break;
-            
-        case 'error':
-            displaySystemNotification(`Error server: ${data.message}`, 'critical');
-            addLogToSupervisorPanel(`Error dari server: ${data.message}`, "error");
-            
-            // Jika error tentang target tidak tersedia, update driver list
-            if (data.message && data.message.includes('tidak tersedia atau tidak online')) {
-                const match = data.message.match(/Target ID '([^']+)'/);
-                if (match) {
-                    const driverId = match[1];
-                    removeDriverFromAvailableList(driverId);
-                    addLogToSupervisorPanel(`Driver ${driverId} ditandai sebagai tidak tersedia`, "warning");
-                }
-                // Request update driver list
-                setTimeout(requestDriverList, 1000);
+            addLogToSupervisorPanel(`Server gagal kirim sinyal ke '${data.target_id}': ${data.reason}`, "error");
+            if (currentCallingDriver === data.target_id) {
+                if (callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Panggilan Gagal: ${data.target_id} error.`;
+                resetCallStateSupervisor(data.target_id);
             }
             break;
-            
-        default: 
-            addLogToSupervisorPanel(`Pesan tidak dikenal dari server: ${JSON.stringify(data)}`, "warning");
+        case 'error':
+            displaySystemNotification(`Error server (Node.js): ${data.message}`, 'critical');
+            addLogToSupervisorPanel(`Error dari Node.js server: ${data.message}`, "error");
+            if (data.message && data.message.toLowerCase().includes("target") && currentCallingDriver) {
+                 if (data.message.toLowerCase().includes(currentCallingDriver.toLowerCase())) {
+                    resetCallStateSupervisor(currentCallingDriver);
+                 }
+            }
+            break;
+        default:
+            addLogToSupervisorPanel(`Pesan tidak dikenal dari Node.js server: ${JSON.stringify(data)}`, "warning");
     }
 }
 
-function handleCallFailed(data) {
-    const targetDriver = data.target_driver_id || currentCallingDriver;
-    addLogToSupervisorPanel(`Panggilan ke ${targetDriver} gagal: ${data.reason}`, "error");
-    
-    if (callStatusSupervisorUI) {
-        callStatusSupervisorUI.textContent = `Panggilan gagal: ${data.reason}`;
-    }
-    
-    // Jika driver tidak online, update statusnya
-    if (data.reason && data.reason.includes('tidak online')) {
-        removeDriverFromAvailableList(targetDriver);
-    }
-    
-    resetCallStateSupervisor(targetDriver);
-    
-    // Request update driver list setelah gagal
-    setTimeout(requestDriverList, 1000);
-}
-
-function handleSignalFailed(data) {
-    const targetId = data.target_id || (data.payload ? data.payload.target : 'unknown');
-    addLogToSupervisorPanel(`Server gagal kirim sinyal WebRTC ke '${targetId}' : ${data.reason} (tipe asli: ${data.original_payload_type})`, "error");
-    
-    // Cek apakah kegagalan ini untuk panggilan yang sedang aktif
-    if (currentCallingDriver && (data.target_id === currentCallingDriver || (data.reason && data.reason.includes(currentCallingDriver)))) {
-        if (callStatusSupervisorUI) {
-            callStatusSupervisorUI.textContent = `Panggilan Gagal: ${currentCallingDriver} tidak online.`;
-        }
-        alert(`Panggilan ke ${currentCallingDriver} gagal: Target tidak online atau koneksi bermasalah.`);
-        resetCallStateSupervisor(currentCallingDriver);
-    } 
-    
-    // Update status driver jika tidak online
-    if (data.reason && data.reason.toLowerCase().includes("tidak online")) {
-        const failedTargetDriver = data.reason.match(/Target '(.*?)' tidak online/);
-        if (failedTargetDriver && failedTargetDriver[1]) {
-            removeDriverFromAvailableList(failedTargetDriver[1]);
-            updateDriverStatusInList(failedTargetDriver[1], "OFFLINE");
-        }
-        displaySystemNotification(`Server gagal mengirim sinyal (${data.original_payload_type || ''}): ${data.reason}`, 'critical');
-    } else {
-        displaySystemNotification(`Server gagal mengirim sinyal (${data.original_payload_type || ''}): ${data.reason || 'Alasan tidak diketahui'}`, 'critical');
-    }
-    
-    // Request update driver list
-    setTimeout(requestDriverList, 1000);
-}
-
-// =====================================================================================
-// FUNGSI MANAJEMEN DRIVER LIST
-// =====================================================================================
-function addDriverToAvailableList(driverId) {
-    availableDrivers.add(driverId);
-    driverStatuses.set(driverId, 'ONLINE');
-    addDriverToList(driverId, 'ONLINE');
-}
-
-function removeDriverFromAvailableList(driverId) {
-    availableDrivers.delete(driverId);
-    driverStatuses.set(driverId, 'OFFLINE');
-    updateDriverStatusInList(driverId, 'OFFLINE');
-}
-
-function updateDriverList(drivers) {
-    if (!driverListUI) return;
-    
-    // Update available drivers set
-    const newDrivers = new Set(drivers);
-    availableDrivers.clear();
-    
-    // Remove drivers yang sudah tidak ada
-    const currentDriverIdsOnUI = new Set(Array.from(driverListUI.children).map(li => li.id.replace('driver-', '')).filter(id => id)); 
-    
-    currentDriverIdsOnUI.forEach(uiDriverId => {
-        if (!newDrivers.has(uiDriverId)) {
-            const liToRemove = document.getElementById(`driver-${uiDriverId}`);
-            if (liToRemove) driverListUI.removeChild(liToRemove);
-            driverStatuses.delete(uiDriverId);
-        }
-    });
-    
-    if (drivers.length === 0) {
-        if (!driverListUI.querySelector('li') || (driverListUI.firstChild && !driverListUI.firstChild.textContent.includes("Belum ada driver"))){
-             driverListUI.innerHTML = '<li>Belum ada driver yang terhubung.</li>';
-        }
-        availableDrivers.clear();
-    } else {
-        if (driverListUI.firstChild && (driverListUI.firstChild.textContent.includes("Belum ada driver") || driverListUI.firstChild.textContent.includes("Koneksi server terputus"))){
-             driverListUI.innerHTML = '';
-        }
-        
-        // Add semua driver yang tersedia
-        drivers.forEach(driverId => {
-            availableDrivers.add(driverId);
-            driverStatuses.set(driverId, 'ONLINE');
-            addDriverToList(driverId, 'ONLINE');
-        });
-    }
-    
-    addLogToSupervisorPanel(`Driver tersedia: ${Array.from(availableDrivers).join(', ') || 'Tidak ada'}`, "info");
-}
-
-function addDriverToList(driverId, statusText = 'UNKNOWN') {
+// --- MANAJEMEN DAFTAR DRIVER (UI) ---
+function updateDriverStatusInList(driverId, status) {
     if (!driverListUI) return;
     let driverLi = document.getElementById(`driver-${driverId}`);
-    
+
     if (!driverLi) {
-        driverLi = document.createElement('li'); 
+        driverLi = document.createElement('li');
         driverLi.id = `driver-${driverId}`;
-        
-        const driverInfoContainer = document.createElement('div'); 
-        driverInfoContainer.className = 'driver-info-container';
-        
-        const nameSpan = document.createElement('span'); 
-        nameSpan.className = 'driver-name'; 
-        nameSpan.textContent = driverId; 
-        driverInfoContainer.appendChild(nameSpan);
-        
-        const statusBadge = document.createElement('span'); 
-        statusBadge.className = 'driver-status-badge'; 
-        driverInfoContainer.appendChild(statusBadge);
-        
-        const drowsyStatusSpan = document.createElement('span'); 
-        drowsyStatusSpan.className = 'driver-alert-status'; 
-        drowsyStatusSpan.style.fontWeight = 'bold'; 
-        drowsyStatusSpan.style.marginLeft = '5px'; 
-        driverInfoContainer.appendChild(drowsyStatusSpan);
-        
+        // ... (struktur internal <li>: driverInfoContainer, nameSpan, statusBadge, drowsyStatusSpan, actionsDiv, callButton)
+        const driverInfoContainer = document.createElement('div'); /* ... */ driverInfoContainer.className = 'driver-info-container';
+        const nameSpan = document.createElement('span'); /* ... */ nameSpan.className = 'driver-name'; nameSpan.textContent = driverId;
+        const statusBadge = document.createElement('span'); /* ... */ statusBadge.className = 'driver-status-badge';
+        const drowsyStatusSpan = document.createElement('span'); /* ... */ drowsyStatusSpan.className = 'driver-alert-status'; drowsyStatusSpan.style.fontWeight = 'bold'; drowsyStatusSpan.style.marginLeft = '5px';
+        driverInfoContainer.appendChild(nameSpan); driverInfoContainer.appendChild(statusBadge); driverInfoContainer.appendChild(drowsyStatusSpan);
         driverLi.appendChild(driverInfoContainer);
-        
-        const actionsDiv = document.createElement('div'); 
-        actionsDiv.className = 'driver-actions';
-        
-        const callButton = document.createElement('button'); 
-        callButton.textContent = 'Panggil'; 
-        callButton.className = 'btn-call'; 
-        callButton.onclick = () => startCall(driverId); 
-        actionsDiv.appendChild(callButton);
-        
-        driverLi.appendChild(actionsDiv);
+        const actionsDiv = document.createElement('div'); /* ... */ actionsDiv.className = 'driver-actions';
+        const callButton = document.createElement('button'); /* ... */ callButton.textContent = 'Panggil'; callButton.className = 'btn-call'; callButton.onclick = () => startCall(driverId);
+        actionsDiv.appendChild(callButton); driverLi.appendChild(actionsDiv);
+
+        const placeholder = driverListUI.querySelector('li');
+        if (placeholder && (placeholder.textContent.includes("Memuat daftar driver...") || placeholder.textContent.includes("Koneksi server terputus") || placeholder.textContent.includes("Belum ada driver"))) {
+            driverListUI.innerHTML = '';
+        }
         driverListUI.appendChild(driverLi);
     }
-    
-    updateDriverStatusInList(driverId, statusText.toUpperCase());
-}
 
-function updateDriverStatusInList(driverId, status, alertMessage = "") {
-    const driverLi = document.getElementById(`driver-${driverId}`);
-    if (!driverLi) { 
-        if (status.toUpperCase() !== 'OFFLINE') { 
-            addDriverToList(driverId, status); 
-        } 
-        return; 
-    }
-    
     const statusBadge = driverLi.querySelector('.driver-status-badge');
     const drowsyStatusSpan = driverLi.querySelector('.driver-alert-status');
     const callButton = driverLi.querySelector('.btn-call');
-    
+
+    driverStatuses.set(driverId, status);
+
     if (statusBadge) {
-        statusBadge.classList.remove('status-drowsy-badge'); 
-        
-        if (status === 'ONLINE' || status === 'ONLINE_NORMAL') {
-            statusBadge.textContent = 'ONLINE'; 
-            statusBadge.className = 'driver-status-badge status-online';
+        statusBadge.classList.remove('status-drowsy-badge', 'status-online', 'status-offline');
+        if (status === 'ONLINE') {
+            statusBadge.textContent = 'ONLINE'; statusBadge.classList.add('status-online');
             if (callButton) callButton.disabled = false;
             if (drowsyStatusSpan) drowsyStatusSpan.textContent = '';
-            driverStatuses.set(driverId, 'ONLINE');
-            availableDrivers.add(driverId);
         } else if (status === 'OFFLINE') {
-            statusBadge.textContent = 'OFFLINE'; 
-            statusBadge.className = 'driver-status-badge status-offline';
+            statusBadge.textContent = 'OFFLINE'; statusBadge.classList.add('status-offline');
             if (callButton) callButton.disabled = true;
-            if (drowsyStatusSpan) drowsyStatusSpan.textContent = ''; 
-            driverStatuses.set(driverId, 'OFFLINE');
-            availableDrivers.delete(driverId);
-            
-            // Remove existing drowsiness alert
-            const existingAlert = document.getElementById(`drowsiness-alert-driver-${driverId}`);
-            if(existingAlert && supervisorAlertsListUI) supervisorAlertsListUI.removeChild(existingAlert);
+            if (drowsyStatusSpan) drowsyStatusSpan.textContent = '';
+            const existingDrowsinessAlert = document.getElementById(`drowsiness-alert-driver-${driverId}`);
+            if (existingDrowsinessAlert && supervisorAlertsListUI) supervisorAlertsListUI.removeChild(existingDrowsinessAlert);
         } else if (status === 'DROWSY') {
-            statusBadge.textContent = 'ONLINE'; 
-            statusBadge.className = 'driver-status-badge status-online status-drowsy-badge'; 
+            statusBadge.textContent = 'ONLINE'; statusBadge.classList.add('status-online', 'status-drowsy-badge');
             if (callButton) callButton.disabled = false;
-            if (drowsyStatusSpan) { 
-                drowsyStatusSpan.textContent = `⚠️`; 
-                drowsyStatusSpan.style.color = '#e74c3c';
-            }
-            driverStatuses.set(driverId, 'DROWSY');
-            availableDrivers.add(driverId);
-        } else { 
-            statusBadge.textContent = status.toUpperCase(); 
-            statusBadge.className = 'driver-status-badge'; 
-            if (callButton) callButton.disabled = true; 
-            driverStatuses.set(driverId, status);
+            if (drowsyStatusSpan) { drowsyStatusSpan.textContent = `⚠️`; drowsyStatusSpan.style.color = '#e74c3c'; }
+        } else {
+            statusBadge.textContent = status.toUpperCase();
+            if (callButton) callButton.disabled = true;
         }
     }
 }
 
-// =====================================================================================
-// FUNGSI NOTIFIKASI
-// =====================================================================================
+// --- FUNGSI NOTIFIKASI ---
+function displaySystemNotification(message, type = 'info') { /* ... (Tidak berubah dari versi sebelumnya) ... */ }
+function displayDrowsinessNotification(driverId, message, type) { /* ... (Tidak berubah dari versi sebelumnya) ... */ }
+
+// --- FUNGSI PANGGILAN VIDEO ---
+async function startCall(driverId) { /* ... (Tidak berubah signifikan dari versi sebelumnya) ... */ }
+function cancelOrEndCall() { /* ... (Tidak berubah signifikan dari versi sebelumnya) ... */ }
+function resetCallStateSupervisor(driverId) { /* ... (Tidak berubah signifikan dari versi sebelumnya) ... */ }
+function resetUiAfterCallEnd() { /* ... (Tidak berubah dari versi sebelumnya) ... */ }
+
+// --- PENANGANAN SINYAL WEBRTC ---
+async function handleWebRTCSignalSupervisor(data) { /* ... (Tidak berubah signifikan dari versi sebelumnya) ... */ }
+
+// --- EVENT LISTENERS DAN INISIALISASI ---
+document.addEventListener('DOMContentLoaded', () => {
+    addLogToSupervisorPanel("Aplikasi Supervisor dimulai (Node.js version)", "info");
+    if(cancelCallBtnSupervisor) {
+        cancelCallBtnSupervisor.addEventListener('click', cancelOrEndCall);
+        cancelCallBtnSupervisor.style.display = 'none';
+    }
+    connectSupervisorWebSocket();
+    addLogToSupervisorPanel("Event listeners berhasil didaftarkan", "success");
+});
+window.addEventListener('beforeunload', () => { /* ... (Tidak berubah dari versi sebelumnya) ... */ });
+document.addEventListener('visibilitychange', () => { /* ... (Tidak berubah dari versi sebelumnya) ... */ });
+
+
+// Implementasi fungsi yang disalin jika ada yang terlewat dari versi sebelumnya
+// (Pastikan semua fungsi helper yang Anda butuhkan sudah ada di sini)
+// Contoh:
 function displaySystemNotification(message, type = 'info') {
     if (!supervisorAlertsListUI) return;
     const firstChild = supervisorAlertsListUI.firstChild;
@@ -444,7 +259,6 @@ function displaySystemNotification(message, type = 'info') {
         supervisorAlertsListUI.removeChild(supervisorAlertsListUI.lastChild); 
     }
 }
-
 function displayDrowsinessNotification(driverId, message, type) {
     if (!supervisorAlertsListUI) return;
     const firstChild = supervisorAlertsListUI.firstChild;
@@ -462,21 +276,17 @@ function displayDrowsinessNotification(driverId, message, type) {
         }
         return;
     }
-    
     if (!alertItem) { 
         alertItem = document.createElement('div'); 
         alertItem.id = existingAlertId;
         supervisorAlertsListUI.prepend(alertItem);
     }
-    
     alertItem.className = `supervisor-alert-item alert-${type}`; 
     alertItem.innerHTML = ''; 
-    
     const messageContent = document.createElement('span'); 
     messageContent.className = 'alert-message-content';
-    messageContent.textContent = `${new Date().toLocaleTimeString()}: Driver ${driverId} - ${message}`;
+    messageContent.textContent = `${new Date().toLocaleTimeString()}: ${message}`; // Pesan sudah termasuk ID driver dari server
     alertItem.appendChild(messageContent);
-    
     if (type === 'critical') {
         const callButton = document.createElement('button'); 
         callButton.textContent = `Panggil ${driverId}`;
@@ -484,466 +294,184 @@ function displayDrowsinessNotification(driverId, message, type) {
         callButton.onclick = () => startCall(driverId);
         alertItem.appendChild(callButton);
     }
-    
     if (supervisorAlertsListUI.children.length > 15) { 
         supervisorAlertsListUI.removeChild(supervisorAlertsListUI.lastChild); 
     }
 }
-
-// =====================================================================================
-// FUNGSI PANGGILAN VIDEO
-// =====================================================================================
 async function startCall(driverId) {
-    // Validasi koneksi WebSocket
-    if (!supervisorWebsocket || supervisorWebsocket.readyState !== WebSocket.OPEN) { 
-        alert("Koneksi server belum siap. Mencoba menghubungkan kembali...");
-        connectSupervisorWebSocket();
-        return; 
+    if (!supervisorWebsocket || supervisorWebsocket.readyState !== WebSocket.OPEN) {
+        alert("Koneksi Node.js server belum siap. Mencoba menghubungkan kembali...");
+        connectSupervisorWebSocket(); return;
     }
-    
-    // Validasi driver tersedia
-    if (!availableDrivers.has(driverId)) {
-        alert(`Driver ${driverId} tidak tersedia atau offline. Memperbarui daftar driver...`);
-        addLogToSupervisorPanel(`Panggilan ke ${driverId} dibatalkan: driver tidak tersedia`, "warning");
-        requestDriverList(); // Request update driver list
-        return;
+    const currentStatus = driverStatuses.get(driverId);
+    if (currentStatus === 'OFFLINE' || !currentStatus) {
+         alert(`Driver ${driverId} tidak tersedia atau offline.`);
+         addLogToSupervisorPanel(`Panggilan ke ${driverId} dibatalkan: driver tidak tersedia/offline`, "warning");
+         return;
     }
-    
-    // Validasi panggilan yang sedang berlangsung
-    if (currentCallingDriver && currentCallingDriver !== driverId) { 
-        alert(`Masih dalam panggilan dengan ${currentCallingDriver}.`); 
-        return; 
-    }
-    
-    // Validasi status PeerConnection
-    if (currentCallingDriver === driverId && peerConnections[driverId] && 
-        ['connected', 'connecting', 'new'].includes(peerConnections[driverId].connectionState)) {
-        alert(`Sudah dalam proses panggilan dengan ${driverId}.`); 
-        return;
-    }
-    
-    addLogToSupervisorPanel(`Memulai panggilan ke ${driverId}... (Status: ${driverStatuses.get(driverId) || 'Unknown'})`, "info");
-    
-    if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Menghubungi ${driverId}...`;
-    if(currentCallingDriverIdUI) currentCallingDriverIdUI.textContent = driverId;
+    if (currentCallingDriver && currentCallingDriver !== driverId) { alert(`Masih dalam panggilan dengan ${currentCallingDriver}.`); return; }
+    if (currentCallingDriver === driverId && peerConnections[driverId] && ['connected', 'connecting'].includes(peerConnections[driverId].connectionState)) { alert(`Sudah dalam proses panggilan dengan ${driverId}.`); return;}
+
+    addLogToSupervisorPanel(`Memulai panggilan ke ${driverId}... (Status: ${currentStatus})`, "info");
+    if (callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Menghubungi ${driverId}...`;
+    if (currentCallingDriverIdUI) currentCallingDriverIdUI.textContent = driverId;
     currentCallingDriver = driverId;
-    
-    if(cancelCallBtnSupervisor) {
-        cancelCallBtnSupervisor.style.display = 'inline-block'; 
-        cancelCallBtnSupervisor.textContent = "Batalkan Panggilan";
-    }
-    
-    // Clean up existing connection
-    if (peerConnections[driverId]) { 
-        peerConnections[driverId].close(); 
-        delete peerConnections[driverId]; 
-    } 
-    
+    if (cancelCallBtnSupervisor) { cancelCallBtnSupervisor.style.display = 'inline-block'; cancelCallBtnSupervisor.textContent = "Batalkan Panggilan"; }
+
+    if (peerConnections[driverId]) { peerConnections[driverId].close(); delete peerConnections[driverId]; }
+
     try {
-        // Setup media stream
-        if (localStreamSupervisor) { 
-            localStreamSupervisor.getTracks().forEach(track => track.stop()); 
-        }
-        
-        localStreamSupervisor = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
-        });
-        
-        if(localVideoSupervisor) localVideoSupervisor.srcObject = localStreamSupervisor;
-        
-        addLogToSupervisorPanel(`Media stream berhasil diperoleh untuk panggilan ke ${driverId}`, "success");
-        
+        if (localStreamSupervisor) localStreamSupervisor.getTracks().forEach(track => track.stop());
+        localStreamSupervisor = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (localVideoSupervisor) localVideoSupervisor.srcObject = localStreamSupervisor;
     } catch (error) {
         addLogToSupervisorPanel(`Error akses media: ${error.name} - ${error.message}`, "error");
-        if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Error: Gagal akses media (${error.name}). Izinkan kamera/mikrofon.`;
-        resetUiAfterCallEnd(); 
-        return;
+        if (callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Error: Gagal akses media (${error.name}).`;
+        resetUiAfterCallEnd(); return;
     }
-    
-    // Setup PeerConnection
+
     peerConnections[driverId] = new RTCPeerConnection(iceServersSupervisor);
     const pc = peerConnections[driverId];
-    
-    if(localStreamSupervisor) { 
-        localStreamSupervisor.getTracks().forEach(track => pc.addTrack(track, localStreamSupervisor)); 
-    }
-    
-    pc.onicecandidate = event => { 
-        if (event.candidate && supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) { 
-            supervisorWebsocket.send(JSON.stringify({ 
-                type: 'webrtc_signal', 
-                target_id: driverId, 
-                payload: { 
-                    type: 'candidate', 
-                    candidate: event.candidate 
-                }
-            })); 
-            addLogToSupervisorPanel(`ICE candidate dikirim ke ${driverId}`);
+    if (localStreamSupervisor) localStreamSupervisor.getTracks().forEach(track => pc.addTrack(track, localStreamSupervisor));
+
+    pc.onicecandidate = event => {
+        if (event.candidate && supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) {
+            supervisorWebsocket.send(JSON.stringify({
+                type: 'webrtc_signal', target_id: driverId,
+                payload: { type: 'candidate', candidate: event.candidate }
+            }));
         }
     };
-    
     pc.ontrack = event => { 
-        if(remoteVideoSupervisor && event.streams && event.streams[0]) {
-            remoteVideoSupervisor.srcObject = event.streams[0]; 
-            addLogToSupervisorPanel(`Remote video stream diterima dari ${driverId}`, "success");
-        } else {
-             addLogToSupervisorPanel("Remote video stream dari driver kosong atau tidak valid.", "warning");
-        }
+        if(remoteVideoSupervisor && event.streams && event.streams[0]) remoteVideoSupervisor.srcObject = event.streams[0];
     };
-    
     pc.onconnectionstatechange = () => {
         if (!pc) return;
         addLogToSupervisorPanel(`Status koneksi ke ${driverId}: ${pc.connectionState}`);
-        
-        if(callStatusSupervisorUI && currentCallingDriver === driverId) {
-            callStatusSupervisorUI.textContent = `Status (${driverId}): ${pc.connectionState}`;
-        }
-        
+        if(callStatusSupervisorUI && currentCallingDriver === driverId) callStatusSupervisorUI.textContent = `Status (${driverId}): ${pc.connectionState}`;
         if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-            if (currentCallingDriver === driverId) { 
-                resetCallStateSupervisor(driverId); 
-            }
+            if (currentCallingDriver === driverId) resetCallStateSupervisor(driverId);
         }
-        
         if (pc.connectionState === 'connected') { 
             if(cancelCallBtnSupervisor) cancelCallBtnSupervisor.textContent = "Akhiri Panggilan"; 
-            if(callTimeoutId) { 
-                clearTimeout(callTimeoutId); 
-                callTimeoutId = null; 
-            }
-            addLogToSupervisorPanel(`Panggilan dengan ${driverId} berhasil terhubung!`, "success");
+            if(callTimeoutId) { clearTimeout(callTimeoutId); callTimeoutId = null; }
         } else if (cancelCallBtnSupervisor) { 
             cancelCallBtnSupervisor.textContent = "Batalkan Panggilan"; 
         } 
     };
-
-    // Setup timeout untuk respons
     if(callTimeoutId) clearTimeout(callTimeoutId);
     callTimeoutId = setTimeout(() => {
         const currentPC = peerConnections[driverId];
         if (currentPC && currentPC.connectionState !== 'connected' && currentPC.connectionState !== 'completed') {
-            addLogToSupervisorPanel(`Timeout: Driver ${driverId} tidak merespons panggilan dalam 30 detik. Membatalkan...`, "warning");
+            addLogToSupervisorPanel(`Timeout: Driver ${driverId} tidak merespons. Membatalkan...`, "warning");
             alert(`Driver ${driverId} tidak merespons. Panggilan dibatalkan.`);
             cancelOrEndCall();
         }
         callTimeoutId = null;
-    }, 30000); // 30 detik timeout
-    
+    }, 30000);
+
     try {
-        // Create dan kirim offer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        
         supervisorWebsocket.send(JSON.stringify({
-            type: 'webrtc_signal',
-            target_id: driverId,
-            payload: {
-                type: 'offer',
-                offer: offer
-            }
+            type: 'webrtc_signal', target_id: driverId,
+            payload: { type: 'offer', offer: { sdp: offer.sdp, type: offer.type } }
         }));
-        
-        addLogToSupervisorPanel(`Offer WebRTC dikirim ke ${driverId}`, "info");
-        
+        addLogToSupervisorPanel(`Offer WebRTC dikirim ke ${driverId} (via Node.js)`, "info");
     } catch (error) {
         addLogToSupervisorPanel(`Error membuat offer untuk ${driverId}: ${error.message}`, "error");
-        if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Error: Gagal membuat offer (${error.name})`;
         resetCallStateSupervisor(driverId);
     }
 }
-
 function cancelOrEndCall() {
     if (!currentCallingDriver) return;
-    
     const driverId = currentCallingDriver;
     addLogToSupervisorPanel(`Membatalkan/mengakhiri panggilan dengan ${driverId}`, "info");
-    
-    // Kirim sinyal cancel ke server jika koneksi masih ada
     if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) {
         supervisorWebsocket.send(JSON.stringify({
-            type: 'webrtc_signal',
-            target_id: driverId,
-            payload: { type: 'call_ended' }
+            type: 'webrtc_signal', target_id: driverId,
+            payload: { type: 'call_ended', reason: 'Supervisor ended the call.' }
         }));
     }
-    
     resetCallStateSupervisor(driverId);
 }
-
 function resetCallStateSupervisor(driverId) {
-    if(callTimeoutId) {
-        clearTimeout(callTimeoutId);
-        callTimeoutId = null;
-    }
-    
-    // Clean up PeerConnection
-    if (peerConnections[driverId]) {
-        peerConnections[driverId].close();
-        delete peerConnections[driverId];
-    }
-    
-    // Clean up media streams
-    if (localStreamSupervisor) {
+    if(callTimeoutId) { clearTimeout(callTimeoutId); callTimeoutId = null; }
+    if (peerConnections[driverId]) { peerConnections[driverId].close(); delete peerConnections[driverId]; }
+    if (currentCallingDriver === driverId || !Object.keys(peerConnections).length) {
+      if (localStreamSupervisor) {
         localStreamSupervisor.getTracks().forEach(track => track.stop());
         localStreamSupervisor = null;
+      }
     }
-    
-    // Reset UI
-    if (currentCallingDriver === driverId || !driverId) {
-        resetUiAfterCallEnd();
-    }
-    
-    addLogToSupervisorPanel(`Panggilan dengan ${driverId || 'driver'} telah berakhir`, "info");
+    if (currentCallingDriver === driverId) { resetUiAfterCallEnd(); }
+    addLogToSupervisorPanel(`Panggilan dengan ${driverId || 'driver'} direset`, "info");
 }
-
 function resetUiAfterCallEnd() {
     currentCallingDriver = null;
-    
     if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = "Tidak ada panggilan aktif";
     if(currentCallingDriverIdUI) currentCallingDriverIdUI.textContent = "-";
     if(cancelCallBtnSupervisor) cancelCallBtnSupervisor.style.display = 'none';
     if(localVideoSupervisor) localVideoSupervisor.srcObject = null;
     if(remoteVideoSupervisor) remoteVideoSupervisor.srcObject = null;
 }
-
-// =====================================================================================
-// FUNGSI PENANGANAN SINYAL WEBRTC
-// =====================================================================================
 async function handleWebRTCSignalSupervisor(data) {
-    const { source_id, payload } = data;
-    
-    if (!source_id || !payload) {
-        addLogToSupervisorPanel("Sinyal WebRTC tidak valid: missing source_id atau payload", "error");
+    const sourceDriverId = data.sender_id;
+    const payload = data.payload;
+    if (!sourceDriverId || !payload) { addLogToSupervisorPanel("Sinyal WebRTC dari Node.js tidak valid", "error"); return; }
+    addLogToSupervisorPanel(`Menerima sinyal WebRTC dari ${sourceDriverId} (via Node.js): ${payload.type}`, "info");
+    if (currentCallingDriver && currentCallingDriver !== sourceDriverId) { addLogToSupervisorPanel(`Mengabaikan sinyal dari ${sourceDriverId}`, "warning"); return; }
+    let pc = peerConnections[sourceDriverId];
+    if (!pc && !['call_rejected', 'call_busy'].includes(payload.type)) {
+        addLogToSupervisorPanel(`Menerima sinyal '${payload.type}' dari ${sourceDriverId} tapi PC tidak ada.`, "error");
+        if (currentCallingDriver === sourceDriverId) resetCallStateSupervisor(sourceDriverId);
         return;
     }
-    
-    addLogToSupervisorPanel(`Menerima sinyal WebRTC dari ${source_id}: ${payload.type}`, "info");
-    
-    // Jika bukan dari driver yang sedang dipanggil, abaikan
-    if (currentCallingDriver && currentCallingDriver !== source_id) {
-        addLogToSupervisorPanel(`Mengabaikan sinyal dari ${source_id}, sedang dalam panggilan dengan ${currentCallingDriver}`, "warning");
-        return;
-    }
-    
-    let pc = peerConnections[source_id];
-    
     try {
         switch (payload.type) {
             case 'answer':
-                if (!pc) {
-                    addLogToSupervisorPanel(`Menerima answer dari ${source_id} tapi tidak ada PeerConnection`, "error");
-                    return;
-                }
-                
-                if (pc.signalingState === 'have-local-offer') {
+                if (!pc) return;
+                if (pc.signalingState === 'have-local-offer' || pc.signalingState === 'stable') {
                     await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
-                    addLogToSupervisorPanel(`Answer dari ${source_id} berhasil diproses`, "success");
-                    
-                    // Clear timeout karena driver merespons
-                    if(callTimeoutId) {
-                        clearTimeout(callTimeoutId);
-                        callTimeoutId = null;
-                    }
-                } else {
-                    addLogToSupervisorPanel(`Signaling state tidak valid untuk answer dari ${source_id}: ${pc.signalingState}`, "warning");
-                }
+                    addLogToSupervisorPanel(`Answer dari ${sourceDriverId} diproses`, "success");
+                    if (callTimeoutId) { clearTimeout(callTimeoutId); callTimeoutId = null; }
+                } else { addLogToSupervisorPanel(`State salah untuk answer dari ${sourceDriverId}: ${pc.signalingState}`, "warning");}
                 break;
-                
             case 'candidate':
-                if (!pc) {
-                    addLogToSupervisorPanel(`Menerima ICE candidate dari ${source_id} tapi tidak ada PeerConnection`, "error");
-                    return;
-                }
-                
-                if (payload.candidate) {
-                    await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-                    addLogToSupervisorPanel(`ICE candidate dari ${source_id} berhasil ditambahkan`);
-                } else {
-                    addLogToSupervisorPanel(`ICE candidate dari ${source_id} kosong (end-of-candidates)`);
-                }
+                if (!pc) return;
+                if (payload.candidate) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
                 break;
-                
-            case 'call_ended':
-                addLogToSupervisorPanel(`Driver ${source_id} mengakhiri panggilan`, "info");
-                resetCallStateSupervisor(source_id);
-                break;
-                
             case 'call_rejected':
-                addLogToSupervisorPanel(`Driver ${source_id} menolak panggilan`, "warning");
-                if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Panggilan ditolak oleh ${source_id}`;
-                alert(`Driver ${source_id} menolak panggilan.`);
-                resetCallStateSupervisor(source_id);
+            case 'call_busy':
+                const reason = payload.reason || (payload.type === 'call_busy' ? 'Driver sibuk' : 'Tidak diketahui');
+                addLogToSupervisorPanel(`Driver ${sourceDriverId} ${payload.type}: ${reason}`, "warning");
+                if (callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Panggilan ${payload.type} oleh ${sourceDriverId}`;
+                alert(`Driver ${sourceDriverId} ${payload.type}: ${reason}`);
+                resetCallStateSupervisor(sourceDriverId);
                 break;
-                
-            case 'driver_busy':
-                addLogToSupervisorPanel(`Driver ${source_id} sedang sibuk`, "warning");
-                if(callStatusSupervisorUI) callStatusSupervisorUI.textContent = `Driver ${source_id} sedang sibuk`;
-                alert(`Driver ${source_id} sedang dalam panggilan lain.`);
-                resetCallStateSupervisor(source_id);
-                break;
-                
-            default:
-                addLogToSupervisorPanel(`Tipe sinyal WebRTC tidak dikenal dari ${source_id}: ${payload.type}`, "warning");
+            default: addLogToSupervisorPanel(`Tipe sinyal WebRTC tidak dikenal: ${payload.type}`, "warning");
         }
     } catch (error) {
-        addLogToSupervisorPanel(`Error menangani sinyal WebRTC dari ${source_id}: ${error.message}`, "error");
-        
-        // Jika error kritis, reset panggilan
-        if (error.name === 'InvalidStateError' || error.name === 'InvalidAccessError') {
-            addLogToSupervisorPanel(`Error kritis, mereset panggilan dengan ${source_id}`, "error");
-            resetCallStateSupervisor(source_id);
-        }
+        addLogToSupervisorPanel(`Error handle sinyal WebRTC dari ${sourceDriverId}: ${error.message}`, "error");
+        if (error.name === 'InvalidStateError' || error.name === 'InvalidAccessError') resetCallStateSupervisor(sourceDriverId);
     }
 }
-
-// =====================================================================================
-// EVENT LISTENERS DAN INISIALISASI
-// =====================================================================================
-document.addEventListener('DOMContentLoaded', () => {
-    addLogToSupervisorPanel("Aplikasi Supervisor dimulai", "info");
-    
-    // Setup cancel call button
-    if(cancelCallBtnSupervisor) {
-        cancelCallBtnSupervisor.addEventListener('click', cancelOrEndCall);
-        cancelCallBtnSupervisor.style.display = 'none';
-    }
-    
-    // Setup refresh driver list button jika ada
-    const refreshDriverListBtn = document.getElementById('refreshDriverListBtn');
-    if(refreshDriverListBtn) {
-        refreshDriverListBtn.addEventListener('click', () => {
-            addLogToSupervisorPanel("Meminta refresh daftar driver...", "info");
-            requestDriverList();
-        });
-    }
-    
-    // Setup clear logs button jika ada
-    const clearLogsBtn = document.getElementById('clearLogsBtn');
-    if(clearLogsBtn) {
-        clearLogsBtn.addEventListener('click', () => {
-            supervisorLogMessages = [];
-            renderSupervisorLogs();
-            addLogToSupervisorPanel("Log dibersihkan", "info");
-        });
-    }
-    
-    // Setup clear alerts button jika ada
-    const clearAlertsBtn = document.getElementById('clearAlertsBtn');
-    if(clearAlertsBtn) {
-        clearAlertsBtn.addEventListener('click', () => {
-            if(supervisorAlertsListUI) {
-                supervisorAlertsListUI.innerHTML = '<p>Belum ada notifikasi.</p>';
-            }
-            addLogToSupervisorPanel("Notifikasi dibersihkan", "info");
-        });
-    }
-    
-    // Mulai koneksi WebSocket
-    connectSupervisorWebSocket();
-    
-    addLogToSupervisorPanel("Event listeners berhasil didaftarkan", "success");
-});
-
-// Cleanup saat window ditutup
 window.addEventListener('beforeunload', () => {
-    // Clean up semua koneksi
-    Object.keys(peerConnections).forEach(driverId => {
-        if (peerConnections[driverId]) {
-            peerConnections[driverId].close();
-        }
-    });
-    
-    // Stop media streams
-    if (localStreamSupervisor) {
-        localStreamSupervisor.getTracks().forEach(track => track.stop());
-    }
-    
-    // Close WebSocket
-    if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) {
-        supervisorWebsocket.close();
-    }
-    
-    // Clear intervals
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-    }
-    
-    if (callTimeoutId) {
-        clearTimeout(callTimeoutId);
-    }
+    Object.keys(peerConnections).forEach(driverId => { if (peerConnections[driverId]) peerConnections[driverId].close(); });
+    if (localStreamSupervisor) localStreamSupervisor.getTracks().forEach(track => track.stop());
+    if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) supervisorWebsocket.close();
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    if (callTimeoutId) clearTimeout(callTimeoutId);
 });
-
-// Handle visibility change untuk pause/resume heartbeat
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        // Tab tersembunyi, kurangi frekuensi heartbeat
         if (heartbeatInterval) {
             clearInterval(heartbeatInterval);
             heartbeatInterval = setInterval(() => {
-                if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) {
-                    supervisorWebsocket.send(JSON.stringify({ type: 'ping' }));
-                }
-            }, 30000); // 30 detik saat tab tersembunyi
+                if (supervisorWebsocket && supervisorWebsocket.readyState === WebSocket.OPEN) supervisorWebsocket.send(JSON.stringify({ type: 'ping' }));
+            }, 30000); 
         }
     } else {
-        // Tab aktif kembali, kembalikan heartbeat normal
-        setupHeartbeat();
-        // Request update driver list
-        requestDriverList();
+        setupHeartbeat(); // Ini akan request driver list juga jika diimplementasi di sana
     }
 });
-
-// =====================================================================================
-// FUNGSI UTILITAS TAMBAHAN
-// =====================================================================================
-function getConnectionStatistics(driverId) {
-    const pc = peerConnections[driverId];
-    if (!pc) return null;
-    
-    return pc.getStats().then(stats => {
-        const statsObj = {};
-        stats.forEach(report => {
-            if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
-                statsObj.videoReceived = {
-                    bytesReceived: report.bytesReceived,
-                    packetsLost: report.packetsLost,
-                    framesDecoded: report.framesDecoded
-                };
-            }
-            if (report.type === 'outbound-rtp' && report.mediaType === 'video') {
-                statsObj.videoSent = {
-                    bytesSent: report.bytesSent,
-                    packetsSent: report.packetsSent,
-                    framesEncoded: report.framesEncoded
-                };
-            }
-        });
-        return statsObj;
-    });
-}
-
-function logConnectionQuality(driverId) {
-    if (!peerConnections[driverId]) return;
-    
-    getConnectionStatistics(driverId).then(stats => {
-        if (stats) {
-            addLogToSupervisorPanel(`Statistik koneksi ${driverId}: ${JSON.stringify(stats)}`, "info");
-        }
-    }).catch(err => {
-        addLogToSupervisorPanel(`Error mendapatkan statistik ${driverId}: ${err.message}`, "error");
-    });
-}
-
-// Export functions untuk testing (jika diperlukan)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        connectSupervisorWebSocket,
-        startCall,
-        cancelOrEndCall,
-        handleWebRTCSignalSupervisor,
-        updateDriverList,
-        displayDrowsinessNotification,
-        displaySystemNotification
-    };
-}

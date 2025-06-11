@@ -27,8 +27,9 @@
         .videos-container-webrtc { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;}
         .videos-container-webrtc video { width: 100%; max-width: 300px; background-color: #222; border: 1px solid #ccc; }
         button { padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; border-radius: 5px; border: none; }
-        .btn-accept { background-color: #28a745; color: white; }
-        .btn-reject { background-color: #dc3545; color: white; }
+        /* Tombol terima/tolak tidak lagi diperlukan jika auto-accept */
+        /* .btn-accept { background-color: #28a745; color: white; } */
+        /* .btn-reject { background-color: #dc3545; color: white; } */
         #driverIdInput { padding: 8px; margin-right: 5px; border-radius: 4px; border: 1px solid #ccc; }
     </style>
 </head>
@@ -43,11 +44,6 @@
         </div>
         <div class="panel call-panel" id="callPanel" style="display: none;">
             <h2>Panggilan Video (WebRTC)</h2>
-            <div id="incomingCallAlert" style="display:none;">
-                <p>Panggilan masuk dari Supervisor (<span id="callerIdText"></span>)!</p>
-                <button id="acceptCallBtn" class="btn-accept">Terima</button>
-                <button id="rejectCallBtn" class="btn-reject">Tolak</button>
-            </div>
             <div class="videos-container-webrtc">
                 <div><h4>Video Anda (Driver)</h4><video id="localVideoDriver" autoplay muted playsinline></video></div>
                 <div><h4>Video Supervisor</h4><video id="remoteVideoDriver" autoplay playsinline></video></div>
